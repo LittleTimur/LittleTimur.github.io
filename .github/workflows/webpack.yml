@@ -33,4 +33,4 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./dist
         keep_files: false
-        enable_jekyll: false  # Если не используете Jekyll
+        enable_jekyll: false  
