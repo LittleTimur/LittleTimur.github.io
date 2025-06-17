@@ -18,7 +18,7 @@ const AllRestoranCard: React.FC<Props> = ({ img, title, review_text, isReversed 
                 {title}
                 </Link>
                 <div className="all-restoran-card-review">
-                    <img className="star" src="/img/star.svg" alt="" />{' '}
+                    <img className="star" src="img/star.svg" alt="" />{' '}
                     <h4 className="review-text">{review_text}</h4>
                 </div>
                 <h6 className="all-restoran-card-description">Nicest place for burgers</h6>
@@ -44,7 +44,7 @@ const AllRestoranCard: React.FC<Props> = ({ img, title, review_text, isReversed 
                 {title}
                 </Link>
                 <div className="all-restoran-card-review">
-                    <img className="star" src="/img/star.svg" alt="" />{' '}
+                    <img className="star" src="img/star.svg" alt="" />{' '}
                     <h4 className="review-text">{review_text}</h4>
                 </div>
                 <h6 className="all-restoran-card-description">Nicest place for burgers</h6>

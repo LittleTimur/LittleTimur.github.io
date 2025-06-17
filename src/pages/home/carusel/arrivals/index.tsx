@@ -6,12 +6,12 @@ import 'swiper/css/scrollbar';
 import { Scrollbar } from 'swiper/modules';
 
 const arrivals = [
-  { title: 'Mira', review_text: '4.2  Очень хорошо', img: '/img/restoran-mira.png' },
-  { title: 'Kara Fin', review_text: '4.2  Очень хорошо', img: '/img/restoran-kara fin.png' },
-  { title: '\'T Kuyltje', review_text: '4.2  Очень хорошо', img: '/img/restoran-kuyltje.png' },
-  { title: 'Laplas', review_text: '4.9  Очень хорошо', img: '/img/restoran-laplas.png' },
-  { title: 'Ria', review_text: '4.9  Очень хорошо', img: '/img/restoran-ria.png' },
-  { title: 'To Space', review_text: '5.0  Очень хорошо', img: '/img/restoran-to space.png' },
+  { title: 'Mira', review_text: '4.2  Очень хорошо', img: 'img/restoran-mira.png' },
+  { title: 'Kara Fin', review_text: '4.2  Очень хорошо', img: 'img/restoran-kara fin.png' },
+  { title: "'T Kuyltje", review_text: '4.2  Очень хорошо', img: 'img/restoran-kuyltje.png' },
+  { title: 'Laplas', review_text: '4.9  Очень хорошо', img: 'img/restoran-laplas.png' },
+  { title: 'Ria', review_text: '4.9  Очень хорошо', img: 'img/restoran-ria.png' },
+  { title: 'To Space', review_text: '5.0  Очень хорошо', img: 'img/restoran-to space.png' },
 ];
 
 const Carusel_Arrivals = (): React.ReactElement => {

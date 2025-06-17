@@ -11,13 +11,13 @@ const Header = (): React.ReactElement => {
     <>
       <header className="header container">
         <Link to="/">
-        <img className="logo" src="/img/logo.svg" alt="" />
+        <img className="logo" src="img/logo.svg" alt="" />
         </Link>
         <button className="btn-menu" onClick={() => setMenuOpen(!menuOpen)}>
-          <img src="/img/menu.svg" alt="" />
+          <img src="img/menu.svg" alt="" />
         </button>
         <Link to="/">
-          <img className="logo-in-med" src="/img/logo-in-footer.svg" alt="" />
+          <img className="logo-in-med" src="img/logo-in-footer.svg" alt="" />
         </Link>
         {isOrderPage && (
           <>
@@ -28,7 +28,7 @@ const Header = (): React.ReactElement => {
               All restaurants
             </Link>
             <Link to="/order/1" className="header-a btn-shop">
-              <img className="shop" src="/img/shop.svg" alt="" />
+              <img className="shop" src="img/shop.svg" alt="" />
             </Link>
           </>
         )}

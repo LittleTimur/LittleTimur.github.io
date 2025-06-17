@@ -23,7 +23,7 @@ const HomePage = (): React.ReactElement => {
             <b className="hungry-b">Hungry?</b> Find your next meal
           </h2>
           <Link to='/all-restorans' className='hungry-button'>See all restaurants</Link>
-          <img className="Ladies" src="/img/Ladies.svg" alt="" />
+          <img className="Ladies" src="img/Ladies.svg" alt="" />
         </div>
         <Carusel_Pick />
         <Banner />

@@ -30,12 +30,12 @@ const Carusel_Categories = (): React.ReactElement => {
   const containerWidth = containerRef.current ? containerRef.current.scrollWidth : 0;
 
   const categories = [
-    { title: 'Pizza', img: '/img/categories-img-pizza.png' },
-    { title: 'Burger', img: '/img/categories-img-burger.png' },
-    { title: 'Sushi', img: '/img/categories-img-sushi.png' },
-    { title: 'Snacks', img: '/img/categories-img-snacks.png' },
-    { title: 'Asian', img: '/img/categories-img-asian.png' },
-    { title: 'Dessert', img: '/img/categories-img-dessert.png' },
+    { title: 'Pizza', img: 'img/categories-img-pizza.png' },
+    { title: 'Burger', img: 'img/categories-img-burger.png' },
+    { title: 'Sushi', img: 'img/categories-img-sushi.png' },
+    { title: 'Snacks', img: 'img/categories-img-snacks.png' },
+    { title: 'Asian', img: 'img/categories-img-asian.png' },
+    { title: 'Dessert', img: 'img/categories-img-dessert.png' },
   ];
 
   return (

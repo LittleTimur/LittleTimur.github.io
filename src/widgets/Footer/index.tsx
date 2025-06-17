@@ -14,9 +14,9 @@ const Footer = (): React.ReactElement => {
     <>
       <div className={ft_class}>
         {isCategoriesPage ? (
-          <img className="logo-in-footer" src="/img/logo-in-footer-green.svg" alt="" />
+          <img className="logo-in-footer" src="img/logo-in-footer-green.svg" alt="" />
         ) : (
-          <img className="logo-in-footer" src="/img/logo-in-footer.svg" alt="" />
+          <img className="logo-in-footer" src="img/logo-in-footer.svg" alt="" />
         )}
         <Footer_Block
           footer_title="discover-us"

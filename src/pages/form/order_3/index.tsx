@@ -34,7 +34,7 @@ const Order3 = (): React.ReactElement => {
         </div>
         <OrderShop/>
       </div>
-      <img className="OrderLedies" src="/img/OrderLedies.svg" alt="" />
+      <img className="OrderLedies" src="img/OrderLedies.svg" alt="" />
     </>
   );
 };

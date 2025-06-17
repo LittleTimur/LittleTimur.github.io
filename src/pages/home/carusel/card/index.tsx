@@ -19,7 +19,7 @@ const Card: React.FC<Props> = ({ img, title, review_text }): React.ReactElement 
             {title}
           </Link>
           <div className="pick-card-review">
-            <img className="star" src="/img/star.svg" alt="" />{' '}
+            <img className="star" src="img/star.svg" alt="" />{' '}
             <h4 className="review-text">{review_text}</h4>
           </div>
           <h6 className="pick-card-description">Nicest place for burgers</h6>

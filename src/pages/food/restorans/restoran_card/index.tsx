@@ -20,7 +20,7 @@ const RestoranCard: React.FC<Props> = ({ img, title, review_text, food }): React
           {title}
           </Link>
           <div className="restoran-card-review">
-            <img className="star" src="/img/star.svg" alt="" />{' '}
+            <img className="star" src="img/star.svg" alt="" />{' '}
             <h4 className="review-text">{review_text}</h4>
           </div>
           <h6 className="restoran-card-description">Nicest place for burgers</h6>
