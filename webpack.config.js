@@ -5,6 +5,7 @@ const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin'
 const CopyPlugin = require("copy-webpack-plugin");
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
+const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
 module.exports = {
     entry: './src/index.tsx',
@@ -12,7 +13,7 @@ module.exports = {
         filename: 'index.js',
         path: path.resolve(__dirname, 'dist'),
         clean: true,
-        publicPath: '/',
+        publicPath: isGitHubPages ? '/Restoran/' : '/',
         assetModuleFilename: 'assets/[name][ext]'
     },
     mode: isDevelopment ? 'development' : 'production',
