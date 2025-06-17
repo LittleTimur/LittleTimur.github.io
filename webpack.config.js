@@ -15,7 +15,7 @@ module.exports = {
         filename: 'index.js',
         path: path.resolve(__dirname, 'dist'),
         clean: true,
-        publicPath: isDevelopment ? '/' : `/${repoName}/`, // Критически важно для GitHub Pages!
+        publicPath: '/',
         assetModuleFilename: 'assets/[name][ext]'
     },
     mode: isDevelopment ? 'development' : 'production',
