@@ -48,26 +48,26 @@ const NewYearLovePage: React.FC = () => {
             window.removeEventListener('mousemove', handleMouseMove);
         };
     }, []);
-//img/banner-img-1.png
+//img/banner-img-1.jpg
     const cards = [
         {
-            front: 'img/img-1.png',
+            front: 'img/img-1.jpg',
             back: 'Ты человек, с которым я хочу проводить все своё время',
         },
         {
-            front: 'img/img-5.png',
+            front: 'img/img-5.jpg',
             back: 'С которым хочу путешествовать',
         },
         {
-            front: 'img/img-6.png',
+            front: 'img/img-6.jpg',
             back: 'Ты всегда устраивала для меня какие-то подарки, и я хочу сделать для тебя то же самое',
         },
         {
-            front: 'img/img-28.png',
+            front: 'img/img-28.jpg',
             back: 'Я был очень счастил, когда переехал с тобой в наже гнёздышко',
         },
         {
-            front: 'img/img-3.png',
+            front: 'img/img-3.jpg',
             back: 'Я помню, как ты выпрашивала у меня эту гирлядку, надеюсь, настанет момент, когда этого делать больше не придётся и я научусь читать твои мысли',
         },
         {
@@ -237,7 +237,7 @@ const NewYearLovePage: React.FC = () => {
                                 return (
                                     <div className="auto-carousel-slide" key={i}>
                                         <img
-                                            src={`img/img-${idx}.png`}
+                                            src={`img/img-${idx}.jpg`}
                                             alt={`Наше фото ${idx}`}
                                             loading="lazy"
                                         />
