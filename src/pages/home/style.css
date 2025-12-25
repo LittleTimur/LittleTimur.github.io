@@ -210,42 +210,47 @@ body {
   padding: 0 10px;
 }
 
+/* ИСПРАВЛЕННЫЙ FLIP CARD - РАБОЧАЯ ВЕРСИЯ */
 .flip-card {
-  perspective: 1200px;
+  height: 300px;
+  width: 100%;
+  perspective: 1000px;
 }
 
 .flip-card-inner {
   position: relative;
   width: 100%;
-  height: 300px;
+  height: 100%;
   text-align: center;
-  transition: var(--transition);
+  transition: transform 0.8s;
   transform-style: preserve-3d;
   border-radius: 20px;
-  overflow: hidden;
   box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .flip-card:hover .flip-card-inner {
-  transform: rotateY(180deg) scale(1.03);
+  transform: rotateY(180deg);
 }
 
-.flip-card-front,
-.flip-card-back {
+.flip-card-front, .flip-card-back {
   position: absolute;
   width: 100%;
   height: 100%;
+  -webkit-backface-visibility: hidden; /* Safari */
   backface-visibility: hidden;
+  border-radius: 20px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 20px;
   box-sizing: border-box;
 }
 
 .flip-card-front {
-  background: var(--bg-card-light);
+  background-color: var(--bg-card-light);
+  color: black;
   border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(12px);
 }
@@ -264,14 +269,15 @@ body {
   font-family: 'Playfair Display', serif;
   font-size: 1.25rem;
   font-style: italic;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
+  text-align: center;
+  padding: 30px;
+  line-height: 1.5;
+  word-wrap: break-word;
 }
 
 .flip-card-back p {
   margin: 0;
-  padding: 0 20px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Пожелания */
@@ -341,52 +347,19 @@ body {
   opacity: 0.7;
 }
 
-/* Анимации появления */
-.fade-in {
-  opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-  transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
-}
-
-.fade-in.appear {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Адаптив */
-@media (max-width: 600px) {
-  .hero-title { font-size: 2.4rem; }
-  .hero-subtitle { font-size: 1.1rem; }
-  .letter { font-size: 1.05rem; }
-  .quote { font-size: 1.2rem; }
-  .flip-card-inner { height: 260px; }
-}
-
-/* При скролле добавляем класс .appear */
-body.appear-ready .fade-in {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-
-/* === Автокарусель === */
+/* Автокарусель */
 .auto-carousel-section {
   margin: 80px 0;
   padding: 0 20px;
 }
 
 .auto-carousel {
-  overflow: hidden;
   width: 100%;
   max-width: 1000px;
   margin: 40px auto 0;
   border-radius: 20px;
-  background: var(--bg-card-light);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: var(--shadow);
   padding: 20px 0;
 }
 
@@ -415,4 +388,70 @@ body.appear-ready .fade-in {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Анимации появления */
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+  transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.fade-in.appear {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* При скролле добавляем класс .appear */
+body.appear-ready .fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Адаптив */
+@media (max-width: 600px) {
+  .hero-title {
+    font-size: 2.4rem;
+  }
+  .hero-subtitle {
+    font-size: 1.1rem;
+  }
+  .letter {
+    font-size: 1.05rem;
+    padding: 0 8px;
+  }
+  .quote {
+    font-size: 1.2rem;
+    padding: 20px 16px;
+    margin: 30px 0;
+  }
+  .flip-card {
+    height: 260px;
+  }
+  .flip-card-back {
+    font-size: 1.1rem;
+    padding: 20px 15px;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .section-title {
+    font-size: 1.8rem;
+  }
+  .auto-carousel-slide {
+    flex: 0 0 160px;
+    height: 130px;
+  }
+}
+
+/* Дополнительные стили для тестирования */
+.test-border {
+  border: 2px solid red !important;
+}
+
+.test-bg {
+  background: #ff0000 !important;
 }
