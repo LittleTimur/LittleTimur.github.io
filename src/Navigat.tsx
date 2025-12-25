@@ -11,6 +11,7 @@ import AllRestoransPage from './pages/allrestorans';
 
 import { Provider } from 'react-redux'
 import store from './data/store'
+import NewYearLovePage from "./pages/home";
 
 const OrderWrapper = () => {
   const { id } = useParams();
@@ -27,7 +28,7 @@ const Navi = () => {
     <Provider store={store}>
     <Router>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<NewYearLovePage />} />
         <Route path="/categories" element={<CategPage />} />
         <Route path="/categories/:category" element={<Food />} />
         <Route path="/categories/:category/:restoran" element={<RestoranPage />} />
