@@ -1,1 +1,379 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MealDrop</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Hind:wght@300;400;500;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet"><script defer="defer" src="/index.js"></script></head><body><div id="root"></div></body></html>
+<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отслеживание шума при записи</title><style>* {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 18px;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            background: #f5f5f5;
+        }
+
+        .status.recording {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status.idle {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .sound-level-container {
+            margin: 30px 0;
+        }
+
+        .sound-level-label {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .sound-level-value {
+            text-align: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .sound-level-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sound-level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50 0%, #ffeb3b 50%, #f44336 100%);
+            width: 0%;
+            transition: width 0.1s ease;
+            border-radius: 15px;
+        }
+
+        .has-sound-indicator {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .has-sound-indicator.active {
+            color: #4caf50;
+        }
+
+        .has-sound-indicator.inactive {
+            color: #999;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn-start {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-start:hover {
+            background: #45a049;
+        }
+
+        .btn-start:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-stop:hover {
+            background: #da190b;
+        }
+
+        .btn-stop:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .wave-animation {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            height: 60px;
+            margin: 20px 0;
+        }
+
+        .wave-bar {
+            width: 4px;
+            background: #667eea;
+            border-radius: 2px;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(1) { animation-delay: 0s; }
+        .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes wave {
+            0%, 100% { height: 20px; }
+            50% { height: 60px; }
+        }
+
+        .wave-animation.hidden {
+            display: none;
+        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div></div><script>let audioContext = null;
+        let analyser = null;
+        let stream = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let silenceTimer = null;
+        let isRecording = false;
+        let isListening = false;
+
+        const THRESHOLD = 10;         // Порог активации (0–255)
+        const SILENCE_TIMEOUT = 3000; // 3 секунды тишины
+
+        let soundLevel = 0;
+        let hasSound = false;
+
+        function getUserMedia(constraints) {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                return navigator.mediaDevices.getUserMedia(constraints);
+            }
+            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            if (!getUserMedia) {
+                return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
+            }
+            return new Promise((resolve, reject) => {
+                getUserMedia.call(navigator, constraints, resolve, reject);
+            });
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.classList.add('show');
+            setTimeout(() => errorEl.classList.remove('show'), 5000);
+        }
+
+        function updateUI() {
+            const statusEl = document.getElementById('status');
+            const soundLevelEl = document.getElementById('soundLevel');
+            const soundLevelFillEl = document.getElementById('soundLevelFill');
+            const hasSoundIndicatorEl = document.getElementById('hasSoundIndicator');
+            const waveAnimationEl = document.getElementById('waveAnimation');
+
+            if (isRecording) {
+                statusEl.textContent = 'Идёт запись...';
+                statusEl.className = 'status recording';
+                waveAnimationEl.classList.remove('hidden');
+            } else if (isListening) {
+                statusEl.textContent = 'Слушаю... Говорите';
+                statusEl.className = 'status idle';
+                waveAnimationEl.classList.add('hidden');
+            } else {
+                statusEl.textContent = 'Готов к записи';
+                statusEl.className = 'status idle';
+                waveAnimationEl.classList.add('hidden');
+            }
+
+            soundLevelEl.textContent = soundLevel;
+            const percentage = Math.min((soundLevel / 255) * 100, 100);
+            soundLevelFillEl.style.width = percentage + '%';
+
+            if (hasSound) {
+                hasSoundIndicatorEl.textContent = '🔊 Обнаружен звук';
+                hasSoundIndicatorEl.className = 'has-sound-indicator active';
+            } else {
+                hasSoundIndicatorEl.textContent = '🔇 Нет звука';
+                hasSoundIndicatorEl.className = 'has-sound-indicator inactive';
+            }
+        }
+
+        function stopAnyPlayback() {
+            // Останавливаем все <audio> элементы на странице
+            document.querySelectorAll('audio').forEach(audio => {
+                if (!audio.paused) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            });
+        }
+
+        function startRecording() {
+            if (isRecording) return;
+
+            console.log('🎙️ Начинаем запись');
+            isRecording = true;
+            audioChunks = [];
+
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                console.log('✅ Запись завершена, размер:', audioBlob.size, 'байт');
+
+                // Сохраняем файл
+                const url = URL.createObjectURL(audioBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `record_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.wav`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+            updateUI();
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+
+            console.log('⏹️ Останавливаем запись');
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            isRecording = false;
+            updateUI();
+        }
+
+        function setupAudioAnalyzer(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+
+            const microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+
+            const checkSound = () => {
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+
+                const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
+                soundLevel = avg;
+                const wasSound = hasSound;
+                hasSound = avg > THRESHOLD;
+
+                // Если появился звук — останавливаем воспроизведение и начинаем запись
+                if (hasSound && !wasSound && !isRecording) {
+                    stopAnyPlayback(); // ← КЛЮЧЕВОЙ МОМЕНТ
+                    startRecording();
+                }
+
+                // Если запись идёт, но звука нет — запускаем таймер тишины
+                if (isRecording && !hasSound) {
+                    if (silenceTimer) clearTimeout(silenceTimer);
+                    silenceTimer = setTimeout(() => {
+                        stopRecording();
+                    }, SILENCE_TIMEOUT);
+                }
+
+                // Если запись идёт и снова появился звук — сбрасываем таймер
+                if (isRecording && hasSound) {
+                    if (silenceTimer) clearTimeout(silenceTimer);
+                }
+
+                updateUI();
+                if (isListening) requestAnimationFrame(checkSound);
+            };
+
+            isListening = true;
+            checkSound();
+        }
+
+        async function init() {
+            try {
+                // Скрываем кнопки — всё автоматически
+                document.querySelector('.button-group').style.display = 'none';
+
+                stream = await getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                setupAudioAnalyzer(stream);
+                updateUI();
+            } catch (err) {
+                showError('Ошибка доступа к микрофону: ' + err.message);
+                console.error(err);
+            }
+        }
+
+        // При загрузке — сразу прослушиваем
+        window.addEventListener('DOMContentLoaded', init);
+
+        // Очистка при закрытии
+        window.addEventListener('beforeunload', () => {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            if (audioContext) audioContext.close();
+        });</script><div id="root"></div></body></html>
