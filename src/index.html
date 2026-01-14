@@ -357,36 +357,41 @@
             const microphone = audioContext.createMediaStreamSource(stream);
             microphone.connect(analyser);
 
+            let lastSoundTime = Date.now(); // Время последнего обнаруженного звука
+
             const checkSound = () => {
                 const dataArray = new Uint8Array(analyser.frequencyBinCount);
                 analyser.getByteFrequencyData(dataArray);
 
                 const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
                 soundLevel = avg;
-                const wasSound = hasSound;
-                hasSound = avg > THRESHOLD;
+                const isAboveThreshold = avg > THRESHOLD;
 
-                // Если появился звук — останавливаем воспроизведение и начинаем запись
-                if (hasSound && !wasSound && !isRecording) {
-                    stopAnyPlayback(); // ← КЛЮЧЕВОЙ МОМЕНТ
+                // Обновляем время, если есть звук
+                if (isAboveThreshold) {
+                    lastSoundTime = Date.now();
+                }
+
+                // Если запись ещё не началась, но есть звук — запускаем
+                if (!isRecording && isAboveThreshold) {
+                    stopAnyPlayback();
                     startRecording();
                 }
 
-                // Если запись идёт, но звука нет — запускаем таймер тишины
-                if (isRecording && !hasSound) {
-                    if (silenceTimer) clearTimeout(silenceTimer);
-                    silenceTimer = setTimeout(() => {
-                        stopRecording();
-                    }, SILENCE_TIMEOUT);
+                // Если запись идёт — проверяем таймаут тишины
+                if (isRecording) {
+                    const silenceDuration = Date.now() - lastSoundTime;
+                    if (silenceDuration >= SILENCE_TIMEOUT) {
+                        stopRecording(); // Останавливаем запись
+                    }
                 }
 
-                // Если запись идёт и снова появился звук — сбрасываем таймер
-                if (isRecording && hasSound) {
-                    if (silenceTimer) clearTimeout(silenceTimer);
-                }
-
+                hasSound = isAboveThreshold;
                 updateUI();
-                if (isListening) requestAnimationFrame(checkSound);
+
+                if (isListening) {
+                    requestAnimationFrame(checkSound);
+                }
             };
 
             isListening = true;
@@ -423,8 +428,6 @@
             if (audioContext) audioContext.close();
         });
     </script>
-
-    <div id="root"></div>
 </body>
 </html>
 
