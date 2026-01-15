@@ -19,7 +19,7 @@
             border-radius: 20px;
             padding: 40px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 500px;
+            max-width: 520px;
             width: 100%;
         }
 
@@ -97,6 +97,54 @@
 
         .has-sound-indicator.inactive {
             color: #999;
+        }
+
+        .settings {
+            margin-top: 20px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: #f7f7ff;
+            border: 1px solid #e0e0ff;
+            font-size: 14px;
+        }
+
+        .settings-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #444;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .settings-row label {
+            flex: 1;
+            color: #555;
+        }
+
+        .settings-row input[type="number"] {
+            width: 90px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        .settings-hint {
+            font-size: 12px;
+            color: #777;
+            margin-bottom: 8px;
+        }
+
+        .settings button {
+            width: 100%;
+            margin-top: 4px;
+            padding: 8px 10px;
+            font-size: 14px;
         }
 
         .button-group {
@@ -186,7 +234,13 @@
 
         .wave-animation.hidden {
             display: none;
-        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div><div id="info"></div></div><script>let audioContext = null;
+        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="settings"><div class="settings-title">Настройки детектора шума</div><div class="settings-row"><label for="thresholdInput">Порог уровня шума (0–255):</label> <input id="thresholdInput" type="number" min="0" max="255" step="1"/></div><div class="settings-row"><label for="silenceTimeoutInput">Таймаут тишины (мс, после которого остановить запись):</label> <input id="silenceTimeoutInput" type="number" min="100" step="100"/></div><div class="settings-hint">По умолчанию порог = 30, таймаут = 3000 мс (3 секунды).</div><button class="btn-start" type="button" onclick="saveSettings()">Сохранить настройки</button></div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div><div id="info"></div></div><script>const DEFAULT_THRESHOLD = 30;
+    const DEFAULT_SILENCE_TIMEOUT = 3000;
+
+    let THRESHOLD = DEFAULT_THRESHOLD;
+    let SILENCE_TIMEOUT = DEFAULT_SILENCE_TIMEOUT;
+
+    let audioContext = null;
     let analyser = null;
     let stream = null;
     let mediaRecorder = null;
@@ -198,9 +252,6 @@
     let tfModel = null;
     let tfListener = null;
     let isPlaybackInterruptible = false;
-
-    const THRESHOLD = 40;
-    const SILENCE_TIMEOUT = 3000;
 
     let soundLevel = 0;
     let hasSound = false;
@@ -228,7 +279,7 @@
 
     async function startInterruptionListener() {
         if (isPlaybackInterruptible) {
-            return; // Уже слушаем
+            return;
         }
 
         if (typeof speechCommands === 'undefined') {
@@ -248,7 +299,6 @@
             isPlaybackInterruptible = true;
             document.getElementById('info').textContent = 'Слушаю команду "stop"...';
 
-            // Начинаем прослушивание — в v0.5.2 это просто запуск
             tfModel.listen(result => {
                 if (!isPlaybackInterruptible) return;
 
@@ -260,7 +310,7 @@
                 console.log(`"stop" confidence: ${confidence.toFixed(3)}`);
 
                 if (confidence > 0.75) {
-                    console.log('✅ Обнаружено: STOP');
+                    console.log('Обнаружено: STOP');
                     document.getElementById('info').textContent = 'Команда "stop" обнаружена!';
                     stopAnyPlayback();
                     isPlaybackInterruptible = false;
@@ -279,7 +329,7 @@
 
     function stopInterruptionListener() {
         if (tfModel && isPlaybackInterruptible) {
-            tfModel.stopListening(); // ← ПРАВИЛЬНЫЙ МЕТОД
+            tfModel.stopListening();
         }
         isPlaybackInterruptible = false;
     }
@@ -332,10 +382,10 @@
         soundLevelFillEl.style.width = percentage + '%';
 
         if (hasSound) {
-            hasSoundIndicatorEl.textContent = '🔊 Обнаружен звук';
+            hasSoundIndicatorEl.textContent = 'Обнаружен звук';
             hasSoundIndicatorEl.className = 'has-sound-indicator active';
         } else {
-            hasSoundIndicatorEl.textContent = '🔇 Нет звука';
+            hasSoundIndicatorEl.textContent = 'Нет звука';
             hasSoundIndicatorEl.className = 'has-sound-indicator inactive';
         }
     }
@@ -347,11 +397,10 @@
         }
         stopInterruptionListener();
 
-        // 🔁 ВОЗОБНОВЛЯЕМ ПРОСЛУШИВАНИЕ МИКРОФОНА
         isRecording = false;
         isListening = true;
         updateUI();
-        requestAnimationFrame(checkSoundLoop); // ← ключевая строка
+        requestAnimationFrame(checkSoundLoop);
     }
 
     function startRecording() {
@@ -384,7 +433,7 @@
             playbackAudio.play().catch(e => {
                 console.warn('Не удалось воспроизвести:', e);
                 showError('Не удалось воспроизвести аудио');
-                stopAnyPlayback(); // на случай ошибки
+                stopAnyPlayback();
             });
 
             startInterruptionListener();
@@ -405,6 +454,12 @@
         updateUI();
     }
 
+    /**
+     * Основной цикл анализа аудиопотока:
+     * - измеряет средний уровень,
+     * - запускает запись при превышении порога,
+     * - останавливает запись после длительной тишины.
+     */
     function checkSoundLoop() {
         if (!isListening || (playbackAudio && !playbackAudio.paused)) {
             return;
@@ -452,6 +507,43 @@
         checkSoundLoop();
     }
 
+
+    function initSettingsUI() {
+        const thresholdInput = document.getElementById('thresholdInput');
+        const silenceTimeoutInput = document.getElementById('silenceTimeoutInput');
+
+        thresholdInput.value = THRESHOLD;
+        silenceTimeoutInput.value = SILENCE_TIMEOUT;
+    }
+
+    function saveSettings() {
+        const thresholdInput = document.getElementById('thresholdInput');
+        const silenceTimeoutInput = document.getElementById('silenceTimeoutInput');
+        const infoEl = document.getElementById('info');
+
+        const parsedThreshold = Number(thresholdInput.value);
+        const parsedTimeout = Number(silenceTimeoutInput.value);
+
+        if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 255) {
+            showError('Порог должен быть числом от 0 до 255');
+            thresholdInput.value = THRESHOLD;
+            return;
+        }
+
+        if (Number.isNaN(parsedTimeout) || parsedTimeout <= 0) {
+            showError('Таймаут тишины должен быть положительным числом (в мс)');
+            silenceTimeoutInput.value = SILENCE_TIMEOUT;
+            return;
+        }
+
+        THRESHOLD = parsedThreshold;
+        SILENCE_TIMEOUT = parsedTimeout;
+
+        infoEl.textContent = `Настройки сохранены: порог = ${THRESHOLD}, таймаут тишины = ${SILENCE_TIMEOUT} мс`;
+        console.log('Обновлённые настройки:', { THRESHOLD, SILENCE_TIMEOUT });
+    }
+
+
     async function init() {
         try {
             document.querySelector('.button-group').style.display = 'none';
@@ -466,13 +558,13 @@
 
             setupAudioAnalyzer(stream);
             updateUI();
+            initSettingsUI();
         } catch (err) {
             showError('Ошибка доступа к микрофону: ' + err.message);
             console.error(err);
         }
     }
 
-    // ЗАПУСКАЕМ ИНИЦИАЛИЗАЦИЮ ПОСЛЕ ЗАГРУЗКИ DOM
     window.addEventListener('DOMContentLoaded', init);
 
     window.addEventListener('beforeunload', () => {
