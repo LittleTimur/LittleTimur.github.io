@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Отслеживание шума при записи</title>
     <!-- TensorFlow.js и Speech Commands -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.0/dist/speech-commands.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -200,323 +200,331 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎤 Отслеживание шума</h1>
+<div class="container">
+    <h1>🎤 Отслеживание шума</h1>
 
-        <div class="status idle" id="status">Готов к записи</div>
+    <div class="status idle" id="status">Готов к записи</div>
 
-        <div class="sound-level-container">
-            <div class="sound-level-label">Уровень звука</div>
-            <div class="sound-level-value" id="soundLevel">0</div>
-            <div class="sound-level-bar">
-                <div class="sound-level-fill" id="soundLevelFill"></div>
-            </div>
+    <div class="sound-level-container">
+        <div class="sound-level-label">Уровень звука</div>
+        <div class="sound-level-value" id="soundLevel">0</div>
+        <div class="sound-level-bar">
+            <div class="sound-level-fill" id="soundLevelFill"></div>
         </div>
-
-        <div class="has-sound-indicator inactive" id="hasSoundIndicator">
-            🔇 Нет звука
-        </div>
-
-        <div class="wave-animation hidden" id="waveAnimation">
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-        </div>
-
-        <div class="button-group">
-            <button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button>
-            <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled>Остановить</button>
-        </div>
-
-        <div class="error" id="error"></div>
     </div>
 
-    <script>
-        let audioContext = null;
-        let analyser = null;
-        let stream = null;
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let isRecording = false;
-        let isListening = false;
-        let playbackAudio = null;
+    <div class="has-sound-indicator inactive" id="hasSoundIndicator">
+        🔇 Нет звука
+    </div>
 
-        // Для распознавания "stop"
-        let speechModel = null;
-        let recognizer = null;
-        let isPlaybackInterruptible = false;
+    <div class="wave-animation hidden" id="waveAnimation">
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+    </div>
 
-        const THRESHOLD = 40;
-        const SILENCE_TIMEOUT = 3000;
+    <div class="button-group">
+        <button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button>
+        <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled>Остановить</button>
+    </div>
 
-        let soundLevel = 0;
-        let hasSound = false;
-        let lastSoundTime = Date.now();
+    <div class="error" id="error"></div>
+</div>
 
-        function getUserMedia(constraints) {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                return navigator.mediaDevices.getUserMedia(constraints);
-            }
-            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-            if (!getUserMedia) {
-                return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
-            }
-            return new Promise((resolve, reject) => {
-                getUserMedia.call(navigator, constraints, resolve, reject);
-            });
+<script>
+    let audioContext = null;
+    let analyser = null;
+    let stream = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+    let isListening = false;
+    let playbackAudio = null;
+
+    // Для распознавания "stop"
+    let speechModel = null;
+    let recognizer = null;
+    let isPlaybackInterruptible = false;
+
+    const THRESHOLD = 40;
+    const SILENCE_TIMEOUT = 3000;
+
+    let soundLevel = 0;
+    let hasSound = false;
+    let lastSoundTime = Date.now();
+
+    function getUserMedia(constraints) {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            return navigator.mediaDevices.getUserMedia(constraints);
+        }
+        const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+        if (!getUserMedia) {
+            return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
+        }
+        return new Promise((resolve, reject) => {
+            getUserMedia.call(navigator, constraints, resolve, reject);
+        });
+    }
+
+    function showError(message) {
+        const errorEl = document.getElementById('error');
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+        setTimeout(() => errorEl.classList.remove('show'), 5000);
+    }
+
+    async function ensureSpeechModelLoaded() {
+        if (speechModel) return;
+
+        // Проверка, что библиотека загружена
+        if (typeof speechCommands === 'undefined') {
+            console.error('Библиотека speech-commands не загружена');
+            showError('Модель распознавания недоступна');
+            return;
         }
 
-        function showError(message) {
-            const errorEl = document.getElementById('error');
-            errorEl.textContent = message;
-            errorEl.classList.add('show');
-            setTimeout(() => errorEl.classList.remove('show'), 5000);
+        try {
+            console.log('Загружаем модель распознавания речи...');
+            speechModel = await speechCommands.create('BROWSER_FFT', '18w');
+            await speechModel.ensureModelLoaded();
+            console.log('Модель загружена. Слова:', speechModel.wordLabels());
+        } catch (e) {
+            console.error('Ошибка загрузки модели:', e);
+            showError('Не удалось загрузить модель распознавания речи');
         }
+    }
 
-        async function ensureSpeechModelLoaded() {
-            if (speechModel) return;
-            try {
-                console.log('Загружаем модель распознавания речи...');
-                speechModel = await speechCommands.create('BROWSER_FFT', '18w'); // 18-word model includes "stop"
-                await speechModel.ensureModelLoaded();
-                console.log('Модель загружена. Доступные слова:', speechModel.wordLabels());
-            } catch (e) {
-                console.error('Ошибка загрузки модели:', e);
-                showError('Не удалось загрузить модель распознавания речи');
-            }
-        }
-
-        function startInterruptionListener() {
-            if (!speechModel) {
-                ensureSpeechModelLoaded().then(() => {
-                    // Повторный запуск после загрузки
-                    if (isPlaybackInterruptible) {
-                        startInterruptionListener();
-                    }
-                });
-                return;
-            }
-
-            if (recognizer) {
-                recognizer.stopListening();
-            }
-
-            isPlaybackInterruptible = true;
-
-            recognizer = speechModel.listen(result => {
-                if (!isPlaybackInterruptible) return;
-
-                const labels = speechModel.wordLabels();
-                const stopIndex = labels.indexOf('stop');
-                if (stopIndex === -1) return;
-
-                const stopScore = result.scores[stopIndex];
-                // Порог 0.65 — можно настроить (0.5–0.8)
-                if (stopScore > 0.65) {
-                    console.log(`Обнаружено "stop" (уверенность: ${stopScore.toFixed(2)})`);
-                    stopAnyPlayback();
-                    isPlaybackInterruptible = false;
+    function startInterruptionListener() {
+        if (!speechModel) {
+            ensureSpeechModelLoaded().then(() => {
+                // Повторный запуск после загрузки
+                if (isPlaybackInterruptible) {
+                    startInterruptionListener();
                 }
-            }, {
-                probabilityThreshold: 0.65,
-                invokeCallbackOnNoise: true,
-                includeSpectrogram: false
             });
+            return;
         }
 
-        function stopInterruptionListener() {
-            if (recognizer) {
-                recognizer.stopListening();
-                recognizer = null;
-            }
-            isPlaybackInterruptible = false;
+        if (recognizer) {
+            recognizer.stopListening();
         }
 
-        function updateUI() {
-            const statusEl = document.getElementById('status');
-            const soundLevelEl = document.getElementById('soundLevel');
-            const soundLevelFillEl = document.getElementById('soundLevelFill');
-            const hasSoundIndicatorEl = document.getElementById('hasSoundIndicator');
-            const waveAnimationEl = document.getElementById('waveAnimation');
+        isPlaybackInterruptible = true;
 
-            if (isRecording) {
-                statusEl.textContent = 'Идёт запись...';
-                statusEl.className = 'status recording';
-                waveAnimationEl.classList.remove('hidden');
-            } else if (playbackAudio && !playbackAudio.paused) {
-                statusEl.textContent = 'Воспроизведение ответа...';
-                statusEl.className = 'status idle';
-                waveAnimationEl.classList.add('hidden');
-            } else if (isListening) {
-                statusEl.textContent = 'Слушаю... Говорите';
-                statusEl.className = 'status idle';
-                waveAnimationEl.classList.add('hidden');
-            } else {
-                statusEl.textContent = 'Готов к записи';
-                statusEl.className = 'status idle';
-                waveAnimationEl.classList.add('hidden');
-            }
+        recognizer = speechModel.listen(result => {
+            if (!isPlaybackInterruptible) return;
 
-            soundLevelEl.textContent = soundLevel;
-            const percentage = Math.min((soundLevel / 255) * 100, 100);
-            soundLevelFillEl.style.width = percentage + '%';
+            const labels = speechModel.wordLabels();
+            const stopIndex = labels.indexOf('stop');
+            if (stopIndex === -1) return;
 
-            if (hasSound) {
-                hasSoundIndicatorEl.textContent = '🔊 Обнаружен звук';
-                hasSoundIndicatorEl.className = 'has-sound-indicator active';
-            } else {
-                hasSoundIndicatorEl.textContent = '🔇 Нет звука';
-                hasSoundIndicatorEl.className = 'has-sound-indicator inactive';
-            }
-        }
-
-        function stopAnyPlayback() {
-            if (playbackAudio && !playbackAudio.paused) {
-                playbackAudio.pause();
-                playbackAudio.currentTime = 0;
-            }
-            stopInterruptionListener();
-        }
-
-        function startRecording() {
-            if (isRecording) return;
-
-            console.log('Начинаем запись');
-            isRecording = true;
-            audioChunks = [];
-
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
-                console.log('Запись завершена, размер:', audioBlob.size, 'байт');
-
-                if (playbackAudio) {
-                    URL.revokeObjectURL(playbackAudio.src);
-                }
-
-                const url = URL.createObjectURL(audioBlob);
-                playbackAudio = new Audio(url);
-                playbackAudio.onended = () => {
-                    URL.revokeObjectURL(url);
-                    isRecording = false;
-                    isListening = true;
-                    stopInterruptionListener();
-                    updateUI();
-                    requestAnimationFrame(checkSoundLoop);
-                };
-
-                playbackAudio.play().catch(e => {
-                    console.warn('Не удалось воспроизвести:', e);
-                    showError('Не удалось воспроизвести аудио');
-                });
-
-                // Запускаем прослушивание для прерывания по "stop"
-                startInterruptionListener();
-            };
-
-            mediaRecorder.start();
-            updateUI();
-        }
-
-        function stopRecording() {
-            if (!isRecording) return;
-
-            console.log('Останавливаем запись');
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-            isRecording = false;
-        }
-
-        let checkSoundLoopRunning = false;
-        function checkSoundLoop() {
-            if (!isListening || isRecording || (playbackAudio && !playbackAudio.paused)) {
-                checkSoundLoopRunning = false;
-                return;
-            }
-
-            checkSoundLoopRunning = true;
-
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-
-            const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
-            soundLevel = avg;
-            const isAboveThreshold = avg > THRESHOLD;
-
-            if (isAboveThreshold) {
-                lastSoundTime = Date.now();
-            }
-
-            if (!isRecording && isAboveThreshold) {
+            const stopScore = result.scores[stopIndex];
+            // Порог 0.65 — можно настроить (0.5–0.8)
+            if (stopScore > 0.65) {
+                console.log(`Обнаружено "stop" (уверенность: ${stopScore.toFixed(2)})`);
                 stopAnyPlayback();
-                startRecording();
+                isPlaybackInterruptible = false;
             }
+        }, {
+            probabilityThreshold: 0.65,
+            invokeCallbackOnNoise: true,
+            includeSpectrogram: false
+        });
+    }
 
-            if (isRecording) {
-                const silenceDuration = Date.now() - lastSoundTime;
-                if (silenceDuration >= SILENCE_TIMEOUT) {
-                    stopRecording();
-                }
-            }
+    function stopInterruptionListener() {
+        if (recognizer) {
+            recognizer.stopListening();
+            recognizer = null;
+        }
+        isPlaybackInterruptible = false;
+    }
 
-            hasSound = isAboveThreshold;
-            updateUI();
+    function updateUI() {
+        const statusEl = document.getElementById('status');
+        const soundLevelEl = document.getElementById('soundLevel');
+        const soundLevelFillEl = document.getElementById('soundLevelFill');
+        const hasSoundIndicatorEl = document.getElementById('hasSoundIndicator');
+        const waveAnimationEl = document.getElementById('waveAnimation');
 
-            if (checkSoundLoopRunning) {
-                requestAnimationFrame(checkSoundLoop);
-            }
+        if (isRecording) {
+            statusEl.textContent = 'Идёт запись...';
+            statusEl.className = 'status recording';
+            waveAnimationEl.classList.remove('hidden');
+        } else if (playbackAudio && !playbackAudio.paused) {
+            statusEl.textContent = 'Воспроизведение ответа...';
+            statusEl.className = 'status idle';
+            waveAnimationEl.classList.add('hidden');
+        } else if (isListening) {
+            statusEl.textContent = 'Слушаю... Говорите';
+            statusEl.className = 'status idle';
+            waveAnimationEl.classList.add('hidden');
+        } else {
+            statusEl.textContent = 'Готов к записи';
+            statusEl.className = 'status idle';
+            waveAnimationEl.classList.add('hidden');
         }
 
-        function setupAudioAnalyzer(stream) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
+        soundLevelEl.textContent = soundLevel;
+        const percentage = Math.min((soundLevel / 255) * 100, 100);
+        soundLevelFillEl.style.width = percentage + '%';
 
-            const microphone = audioContext.createMediaStreamSource(stream);
-            microphone.connect(analyser);
-
-            isListening = true;
-            lastSoundTime = Date.now();
-            checkSoundLoop();
+        if (hasSound) {
+            hasSoundIndicatorEl.textContent = '🔊 Обнаружен звук';
+            hasSoundIndicatorEl.className = 'has-sound-indicator active';
+        } else {
+            hasSoundIndicatorEl.textContent = '🔇 Нет звука';
+            hasSoundIndicatorEl.className = 'has-sound-indicator inactive';
         }
+    }
 
-        async function init() {
-            try {
-                document.querySelector('.button-group').style.display = 'none';
-
-                stream = await getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
-                });
-
-                setupAudioAnalyzer(stream);
-                updateUI();
-
-                // Предзагружаем модель (опционально, чтобы ускорить первый вызов)
-                ensureSpeechModelLoaded();
-            } catch (err) {
-                showError('Ошибка доступа к микрофону: ' + err.message);
-                console.error(err);
-            }
+    function stopAnyPlayback() {
+        if (playbackAudio && !playbackAudio.paused) {
+            playbackAudio.pause();
+            playbackAudio.currentTime = 0;
         }
+        stopInterruptionListener();
+    }
 
-        window.addEventListener('DOMContentLoaded', init);
+    function startRecording() {
+        if (isRecording) return;
 
-        window.addEventListener('beforeunload', () => {
-            if (stream) stream.getTracks().forEach(t => t.stop());
-            if (audioContext) audioContext.close();
+        console.log('Начинаем запись');
+        isRecording = true;
+        audioChunks = [];
+
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
+            console.log('Запись завершена, размер:', audioBlob.size, 'байт');
+
             if (playbackAudio) {
                 URL.revokeObjectURL(playbackAudio.src);
             }
-            stopInterruptionListener();
-        });
-    </script>
+
+            const url = URL.createObjectURL(audioBlob);
+            playbackAudio = new Audio(url);
+            playbackAudio.onended = () => {
+                URL.revokeObjectURL(url);
+                isRecording = false;
+                isListening = true;
+                stopInterruptionListener();
+                updateUI();
+                requestAnimationFrame(checkSoundLoop);
+            };
+
+            playbackAudio.play().catch(e => {
+                console.warn('Не удалось воспроизвести:', e);
+                showError('Не удалось воспроизвести аудио');
+            });
+
+            // Запускаем прослушивание для прерывания по "stop"
+            startInterruptionListener();
+        };
+
+        mediaRecorder.start();
+        updateUI();
+    }
+
+    function stopRecording() {
+        if (!isRecording) return;
+
+        console.log('Останавливаем запись');
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        isRecording = false;
+    }
+
+    let checkSoundLoopRunning = false;
+    function checkSoundLoop() {
+        if (!isListening || isRecording || (playbackAudio && !playbackAudio.paused)) {
+            checkSoundLoopRunning = false;
+            return;
+        }
+
+        checkSoundLoopRunning = true;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
+        soundLevel = avg;
+        const isAboveThreshold = avg > THRESHOLD;
+
+        if (isAboveThreshold) {
+            lastSoundTime = Date.now();
+        }
+
+        if (!isRecording && isAboveThreshold) {
+            stopAnyPlayback();
+            startRecording();
+        }
+
+        if (isRecording) {
+            const silenceDuration = Date.now() - lastSoundTime;
+            if (silenceDuration >= SILENCE_TIMEOUT) {
+                stopRecording();
+            }
+        }
+
+        hasSound = isAboveThreshold;
+        updateUI();
+
+        if (checkSoundLoopRunning) {
+            requestAnimationFrame(checkSoundLoop);
+        }
+    }
+
+    function setupAudioAnalyzer(stream) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+
+        const microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+
+        isListening = true;
+        lastSoundTime = Date.now();
+        checkSoundLoop();
+    }
+
+    async function init() {
+        try {
+            document.querySelector('.button-group').style.display = 'none';
+
+            stream = await getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+
+            setupAudioAnalyzer(stream);
+            updateUI();
+
+            // Предзагружаем модель (опционально, чтобы ускорить первый вызов)
+            ensureSpeechModelLoaded();
+        } catch (err) {
+            showError('Ошибка доступа к микрофону: ' + err.message);
+            console.error(err);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+
+    window.addEventListener('beforeunload', () => {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (audioContext) audioContext.close();
+        if (playbackAudio) {
+            URL.revokeObjectURL(playbackAudio.src);
+        }
+        stopInterruptionListener();
+    });
+</script>
 </body>
 </html>
