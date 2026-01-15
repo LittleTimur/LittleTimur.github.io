@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Отслеживание шума при записи</title>
+    <!-- TensorFlow.js и Speech Commands -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.0"></script>
     <style>
         * {
             margin: 0;
@@ -236,25 +239,27 @@
         let stream = null;
         let mediaRecorder = null;
         let audioChunks = [];
-        let silenceTimer = null;
         let isRecording = false;
         let isListening = false;
+        let playbackAudio = null;
 
-        let waitingOscillator = null;
-        let waitingGainNode = null;
-        let isWaitingSoundPlaying = false;
+        // Для распознавания "stop"
+        let speechModel = null;
+        let recognizer = null;
+        let isPlaybackInterruptible = false;
 
         const THRESHOLD = 40;
         const SILENCE_TIMEOUT = 3000;
 
         let soundLevel = 0;
         let hasSound = false;
+        let lastSoundTime = Date.now();
 
         function getUserMedia(constraints) {
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 return navigator.mediaDevices.getUserMedia(constraints);
             }
-            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserism;
+            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
             if (!getUserMedia) {
                 return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
             }
@@ -270,6 +275,65 @@
             setTimeout(() => errorEl.classList.remove('show'), 5000);
         }
 
+        async function ensureSpeechModelLoaded() {
+            if (speechModel) return;
+            try {
+                console.log('Загружаем модель распознавания речи...');
+                speechModel = await speechCommands.create('BROWSER_FFT', '18w'); // 18-word model includes "stop"
+                await speechModel.ensureModelLoaded();
+                console.log('Модель загружена. Доступные слова:', speechModel.wordLabels());
+            } catch (e) {
+                console.error('Ошибка загрузки модели:', e);
+                showError('Не удалось загрузить модель распознавания речи');
+            }
+        }
+
+        function startInterruptionListener() {
+            if (!speechModel) {
+                ensureSpeechModelLoaded().then(() => {
+                    // Повторный запуск после загрузки
+                    if (isPlaybackInterruptible) {
+                        startInterruptionListener();
+                    }
+                });
+                return;
+            }
+
+            if (recognizer) {
+                recognizer.stopListening();
+            }
+
+            isPlaybackInterruptible = true;
+
+            recognizer = speechModel.listen(result => {
+                if (!isPlaybackInterruptible) return;
+
+                const labels = speechModel.wordLabels();
+                const stopIndex = labels.indexOf('stop');
+                if (stopIndex === -1) return;
+
+                const stopScore = result.scores[stopIndex];
+                // Порог 0.65 — можно настроить (0.5–0.8)
+                if (stopScore > 0.65) {
+                    console.log(`Обнаружено "stop" (уверенность: ${stopScore.toFixed(2)})`);
+                    stopAnyPlayback();
+                    isPlaybackInterruptible = false;
+                }
+            }, {
+                probabilityThreshold: 0.65,
+                invokeCallbackOnNoise: true,
+                includeSpectrogram: false
+            });
+        }
+
+        function stopInterruptionListener() {
+            if (recognizer) {
+                recognizer.stopListening();
+                recognizer = null;
+            }
+            isPlaybackInterruptible = false;
+        }
+
         function updateUI() {
             const statusEl = document.getElementById('status');
             const soundLevelEl = document.getElementById('soundLevel');
@@ -281,6 +345,10 @@
                 statusEl.textContent = 'Идёт запись...';
                 statusEl.className = 'status recording';
                 waveAnimationEl.classList.remove('hidden');
+            } else if (playbackAudio && !playbackAudio.paused) {
+                statusEl.textContent = 'Воспроизведение ответа...';
+                statusEl.className = 'status idle';
+                waveAnimationEl.classList.add('hidden');
             } else if (isListening) {
                 statusEl.textContent = 'Слушаю... Говорите';
                 statusEl.className = 'status idle';
@@ -305,47 +373,11 @@
         }
 
         function stopAnyPlayback() {
-            document.querySelectorAll('audio').forEach(audio => {
-                if (!audio.paused) {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }
-            });
-        }
-
-        function playWaitingSound() {
-            if (isWaitingSoundPlaying || !audioContext) return;
-
-            waitingOscillator = audioContext.createOscillator();
-            waitingGainNode = audioContext.createGain();
-
-            waitingOscillator.type = 'sine';
-            waitingOscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4 нота
-            waitingOscillator.frequency.setValueAtTime(330, audioContext.currentTime + 0.5); // чуть ниже
-
-            waitingGainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
-            waitingGainNode.gain.setTargetAtTime(0.03, audioContext.currentTime, 2); // медленное затухание
-
-            waitingOscillator.connect(waitingGainNode);
-            waitingGainNode.connect(audioContext.destination);
-
-            waitingOscillator.start();
-            isWaitingSoundPlaying = true;
-
-            setTimeout(() => {
-                if (isWaitingSoundPlaying) {
-                    stopWaitingSound();
-                }
-            }, 10000);
-        }
-
-        function stopWaitingSound() {
-            if (!isWaitingSoundPlaying) return;
-            if (waitingOscillator) {
-                waitingOscillator.stop();
-                waitingOscillator = null;
+            if (playbackAudio && !playbackAudio.paused) {
+                playbackAudio.pause();
+                playbackAudio.currentTime = 0;
             }
-            isWaitingSoundPlaying = false;
+            stopInterruptionListener();
         }
 
         function startRecording() {
@@ -355,22 +387,34 @@
             isRecording = true;
             audioChunks = [];
 
-            stopWaitingSound();
-
             mediaRecorder = new MediaRecorder(stream);
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
                 console.log('Запись завершена, размер:', audioBlob.size, 'байт');
 
+                if (playbackAudio) {
+                    URL.revokeObjectURL(playbackAudio.src);
+                }
+
                 const url = URL.createObjectURL(audioBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `record_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.wav`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                playbackAudio = new Audio(url);
+                playbackAudio.onended = () => {
+                    URL.revokeObjectURL(url);
+                    isRecording = false;
+                    isListening = true;
+                    stopInterruptionListener();
+                    updateUI();
+                    requestAnimationFrame(checkSoundLoop);
+                };
+
+                playbackAudio.play().catch(e => {
+                    console.warn('Не удалось воспроизвести:', e);
+                    showError('Не удалось воспроизвести аудио');
+                });
+
+                // Запускаем прослушивание для прерывания по "stop"
+                startInterruptionListener();
             };
 
             mediaRecorder.start();
@@ -385,10 +429,45 @@
                 mediaRecorder.stop();
             }
             isRecording = false;
+        }
+
+        let checkSoundLoopRunning = false;
+        function checkSoundLoop() {
+            if (!isListening || isRecording || (playbackAudio && !playbackAudio.paused)) {
+                checkSoundLoopRunning = false;
+                return;
+            }
+
+            checkSoundLoopRunning = true;
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+
+            const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
+            soundLevel = avg;
+            const isAboveThreshold = avg > THRESHOLD;
+
+            if (isAboveThreshold) {
+                lastSoundTime = Date.now();
+            }
+
+            if (!isRecording && isAboveThreshold) {
+                stopAnyPlayback();
+                startRecording();
+            }
+
+            if (isRecording) {
+                const silenceDuration = Date.now() - lastSoundTime;
+                if (silenceDuration >= SILENCE_TIMEOUT) {
+                    stopRecording();
+                }
+            }
+
+            hasSound = isAboveThreshold;
             updateUI();
 
-            if (isListening && !hasSound) {
-                playWaitingSound();
+            if (checkSoundLoopRunning) {
+                requestAnimationFrame(checkSoundLoop);
             }
         }
 
@@ -400,50 +479,9 @@
             const microphone = audioContext.createMediaStreamSource(stream);
             microphone.connect(analyser);
 
-            let lastSoundTime = Date.now();
-
-            const checkSound = () => {
-                const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(dataArray);
-
-                const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
-                soundLevel = avg;
-                const isAboveThreshold = avg > THRESHOLD;
-
-                if (isAboveThreshold) {
-                    lastSoundTime = Date.now();
-                }
-
-                if (isAboveThreshold && isWaitingSoundPlaying) {
-                    stopWaitingSound();
-                }
-
-                if (!isRecording && isAboveThreshold) {
-                    stopAnyPlayback();
-                    startRecording();
-                }
-
-                if (isRecording) {
-                    const silenceDuration = Date.now() - lastSoundTime;
-                    if (silenceDuration >= SILENCE_TIMEOUT) {
-                        stopRecording();
-                    }
-                }
-
-                hasSound = isAboveThreshold;
-                updateUI();
-
-                if (isListening && !isRecording && !hasSound && !isWaitingSoundPlaying) {
-                    playWaitingSound();
-                }
-
-                if (isListening) {
-                    requestAnimationFrame(checkSound);
-                }
-            };
-
             isListening = true;
-            checkSound();
+            lastSoundTime = Date.now();
+            checkSoundLoop();
         }
 
         async function init() {
@@ -460,6 +498,9 @@
 
                 setupAudioAnalyzer(stream);
                 updateUI();
+
+                // Предзагружаем модель (опционально, чтобы ускорить первый вызов)
+                ensureSpeechModelLoaded();
             } catch (err) {
                 showError('Ошибка доступа к микрофону: ' + err.message);
                 console.error(err);
@@ -471,9 +512,11 @@
         window.addEventListener('beforeunload', () => {
             if (stream) stream.getTracks().forEach(t => t.stop());
             if (audioContext) audioContext.close();
-            stopWaitingSound();
+            if (playbackAudio) {
+                URL.revokeObjectURL(playbackAudio.src);
+            }
+            stopInterruptionListener();
         });
     </script>
 </body>
 </html>
-
