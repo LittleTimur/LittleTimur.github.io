@@ -240,8 +240,12 @@
         let isRecording = false;
         let isListening = false;
 
-        const THRESHOLD = 40;         // Порог активации (0–255)
-        const SILENCE_TIMEOUT = 3000; // 3 секунды тишины
+        let waitingOscillator = null;
+        let waitingGainNode = null;
+        let isWaitingSoundPlaying = false;
+
+        const THRESHOLD = 40;
+        const SILENCE_TIMEOUT = 3000;
 
         let soundLevel = 0;
         let hasSound = false;
@@ -250,7 +254,7 @@
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 return navigator.mediaDevices.getUserMedia(constraints);
             }
-            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserism;
             if (!getUserMedia) {
                 return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
             }
@@ -301,7 +305,6 @@
         }
 
         function stopAnyPlayback() {
-            // Останавливаем все <audio> элементы на странице
             document.querySelectorAll('audio').forEach(audio => {
                 if (!audio.paused) {
                     audio.pause();
@@ -310,20 +313,56 @@
             });
         }
 
+        function playWaitingSound() {
+            if (isWaitingSoundPlaying || !audioContext) return;
+
+            waitingOscillator = audioContext.createOscillator();
+            waitingGainNode = audioContext.createGain();
+
+            waitingOscillator.type = 'sine';
+            waitingOscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4 нота
+            waitingOscillator.frequency.setValueAtTime(330, audioContext.currentTime + 0.5); // чуть ниже
+
+            waitingGainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
+            waitingGainNode.gain.setTargetAtTime(0.03, audioContext.currentTime, 2); // медленное затухание
+
+            waitingOscillator.connect(waitingGainNode);
+            waitingGainNode.connect(audioContext.destination);
+
+            waitingOscillator.start();
+            isWaitingSoundPlaying = true;
+
+            setTimeout(() => {
+                if (isWaitingSoundPlaying) {
+                    stopWaitingSound();
+                }
+            }, 10000);
+        }
+
+        function stopWaitingSound() {
+            if (!isWaitingSoundPlaying) return;
+            if (waitingOscillator) {
+                waitingOscillator.stop();
+                waitingOscillator = null;
+            }
+            isWaitingSoundPlaying = false;
+        }
+
         function startRecording() {
             if (isRecording) return;
 
-            console.log('🎙️ Начинаем запись');
+            console.log('Начинаем запись');
             isRecording = true;
             audioChunks = [];
+
+            stopWaitingSound();
 
             mediaRecorder = new MediaRecorder(stream);
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
             mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                console.log('✅ Запись завершена, размер:', audioBlob.size, 'байт');
+                console.log('Запись завершена, размер:', audioBlob.size, 'байт');
 
-                // Сохраняем файл
                 const url = URL.createObjectURL(audioBlob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -341,12 +380,16 @@
         function stopRecording() {
             if (!isRecording) return;
 
-            console.log('⏹️ Останавливаем запись');
+            console.log('Останавливаем запись');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
             isRecording = false;
             updateUI();
+
+            if (isListening && !hasSound) {
+                playWaitingSound();
+            }
         }
 
         function setupAudioAnalyzer(stream) {
@@ -357,7 +400,7 @@
             const microphone = audioContext.createMediaStreamSource(stream);
             microphone.connect(analyser);
 
-            let lastSoundTime = Date.now(); // Время последнего обнаруженного звука
+            let lastSoundTime = Date.now();
 
             const checkSound = () => {
                 const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -367,27 +410,32 @@
                 soundLevel = avg;
                 const isAboveThreshold = avg > THRESHOLD;
 
-                // Обновляем время, если есть звук
                 if (isAboveThreshold) {
                     lastSoundTime = Date.now();
                 }
 
-                // Если запись ещё не началась, но есть звук — запускаем
+                if (isAboveThreshold && isWaitingSoundPlaying) {
+                    stopWaitingSound();
+                }
+
                 if (!isRecording && isAboveThreshold) {
                     stopAnyPlayback();
                     startRecording();
                 }
 
-                // Если запись идёт — проверяем таймаут тишины
                 if (isRecording) {
                     const silenceDuration = Date.now() - lastSoundTime;
                     if (silenceDuration >= SILENCE_TIMEOUT) {
-                        stopRecording(); // Останавливаем запись
+                        stopRecording();
                     }
                 }
 
                 hasSound = isAboveThreshold;
                 updateUI();
+
+                if (isListening && !isRecording && !hasSound && !isWaitingSoundPlaying) {
+                    playWaitingSound();
+                }
 
                 if (isListening) {
                     requestAnimationFrame(checkSound);
@@ -400,7 +448,6 @@
 
         async function init() {
             try {
-                // Скрываем кнопки — всё автоматически
                 document.querySelector('.button-group').style.display = 'none';
 
                 stream = await getUserMedia({
@@ -419,13 +466,12 @@
             }
         }
 
-        // При загрузке — сразу прослушиваем
         window.addEventListener('DOMContentLoaded', init);
 
-        // Очистка при закрытии
         window.addEventListener('beforeunload', () => {
             if (stream) stream.getTracks().forEach(t => t.stop());
             if (audioContext) audioContext.close();
+            stopWaitingSound();
         });
     </script>
 </body>
