@@ -1,4 +1,4 @@
-<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отслеживание шума при записи</title><style>* {
+<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отслеживание шума при записи</title><script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.2/dist/speech-commands.min.js"></script><style>* {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -186,7 +186,7 @@
 
         .wave-animation.hidden {
             display: none;
-        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div></div><script>let audioContext = null;
+        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div><div id="info"></div></div><script>let audioContext = null;
     let analyser = null;
     let stream = null;
     let mediaRecorder = null;
@@ -195,8 +195,8 @@
     let isListening = false;
     let playbackAudio = null;
 
-    // Для распознавания "stop" во время воспроизведения
-    let speechRecognizer = null;
+    let tfModel = null;
+    let tfListener = null;
     let isPlaybackInterruptible = false;
 
     const THRESHOLD = 40;
@@ -204,7 +204,7 @@
 
     let soundLevel = 0;
     let hasSound = false;
-    let lastSoundTime = Date.now(); // ← КЛЮЧЕВАЯ переменная, которую я убрал раньше
+    let lastSoundTime = Date.now();
 
     function getUserMedia(constraints) {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -226,42 +226,62 @@
         setTimeout(() => errorEl.classList.remove('show'), 5000);
     }
 
-    // === Web Speech API для прерывания воспроизведения ===
-    function startInterruptionListener() {
-        if (!('webkitSpeechRecognition' in window)) {
-            console.warn('Web Speech API не поддерживается. Используем прерывание по звуку.');
+    async function startInterruptionListener() {
+        if (isPlaybackInterruptible) {
+            return; // Уже слушаем
+        }
+
+        if (typeof speechCommands === 'undefined') {
+            console.error('speechCommands не определён');
+            showError('Модель распознавания недоступна');
             startSimpleInterruption();
             return;
         }
 
-        if (speechRecognizer) {
-            speechRecognizer.stop();
-        }
+        try {
+            if (!tfModel) {
+                document.getElementById('info').textContent = 'Загрузка модели распознавания...';
+                console.log('Загружаем Speech Commands модель...');
+                tfModel = await speechCommands.create('BROWSER_FFT');
+            }
 
-        speechRecognizer = new webkitSpeechRecognition();
-        speechRecognizer.continuous = true;
-        speechRecognizer.interimResults = true;
-        speechRecognizer.lang = 'en-US'; // лучше распознаёт "stop"
+            isPlaybackInterruptible = true;
+            document.getElementById('info').textContent = 'Слушаю команду "stop"...';
 
-        speechRecognizer.onresult = (event) => {
-            if (!isPlaybackInterruptible) return;
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript.trim().toLowerCase();
-                if (transcript.includes('stop') || transcript.includes('стоп')) {
-                    console.log('Команда "stop" обнаружена!');
+            // Начинаем прослушивание — в v0.5.2 это просто запуск
+            tfModel.listen(result => {
+                if (!isPlaybackInterruptible) return;
+
+                const labels = tfModel.wordLabels();
+                const stopIndex = labels.indexOf('stop');
+                if (stopIndex === -1) return;
+
+                const confidence = result.scores[stopIndex];
+                console.log(`"stop" confidence: ${confidence.toFixed(3)}`);
+
+                if (confidence > 0.75) {
+                    console.log('✅ Обнаружено: STOP');
+                    document.getElementById('info').textContent = 'Команда "stop" обнаружена!';
                     stopAnyPlayback();
                     isPlaybackInterruptible = false;
-                    return;
                 }
-            }
-        };
+            }, {
+                probabilityThreshold: 0.75,
+                invokeCallbackOnNoise: true
+            });
 
-        speechRecognizer.onerror = () => {
+        } catch (err) {
+            console.error('TF.js ошибка:', err);
+            showError('Не удалось запустить распознавание речи: ' + err.message);
             startSimpleInterruption();
-        };
+        }
+    }
 
-        speechRecognizer.start();
-        isPlaybackInterruptible = true;
+    function stopInterruptionListener() {
+        if (tfModel && isPlaybackInterruptible) {
+            tfModel.stopListening(); // ← ПРАВИЛЬНЫЙ МЕТОД
+        }
+        isPlaybackInterruptible = false;
     }
 
     function startSimpleInterruption() {
@@ -282,15 +302,6 @@
         check();
     }
 
-    function stopInterruptionListener() {
-        if (speechRecognizer) {
-            speechRecognizer.stop();
-            speechRecognizer = null;
-        }
-        isPlaybackInterruptible = false;
-    }
-
-    // === UI и запись — как в вашем рабочем коде ===
     function updateUI() {
         const statusEl = document.getElementById('status');
         const soundLevelEl = document.getElementById('soundLevel');
@@ -335,12 +346,20 @@
             playbackAudio.currentTime = 0;
         }
         stopInterruptionListener();
+
+        // 🔁 ВОЗОБНОВЛЯЕМ ПРОСЛУШИВАНИЕ МИКРОФОНА
+        isRecording = false;
+        isListening = true;
+        updateUI();
+        requestAnimationFrame(checkSoundLoop); // ← ключевая строка
     }
 
     function startRecording() {
         if (isRecording) return;
 
         console.log('Начинаем запись');
+        const infoEl = document.getElementById('info');
+        infoEl.textContent = 'Начинаем запись';
         isRecording = true;
         audioChunks = [];
 
@@ -349,6 +368,7 @@
         mediaRecorder.onstop = () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
             console.log('Запись завершена, размер:', audioBlob.size, 'байт');
+            infoEl.textContent = 'Запись завершена';
 
             if (playbackAudio) {
                 URL.revokeObjectURL(playbackAudio.src);
@@ -358,20 +378,15 @@
             playbackAudio = new Audio(url);
             playbackAudio.onended = () => {
                 URL.revokeObjectURL(url);
-                isRecording = false;
-                isListening = true;
-                stopInterruptionListener();
-                updateUI();
-                // Продолжаем прослушивание
-                requestAnimationFrame(checkSoundLoop);
+                stopAnyPlayback();
             };
 
             playbackAudio.play().catch(e => {
                 console.warn('Не удалось воспроизвести:', e);
                 showError('Не удалось воспроизвести аудио');
+                stopAnyPlayback(); // на случай ошибки
             });
 
-            // Запускаем прослушивание для прерывания
             startInterruptionListener();
         };
 
@@ -390,12 +405,10 @@
         updateUI();
     }
 
-    // === Основной цикл анализа звука — как в вашем коде ===
     function checkSoundLoop() {
         if (!isListening || (playbackAudio && !playbackAudio.paused)) {
-            return; // Прекращаем анализ ТОЛЬКО во время воспроизведения
+            return;
         }
-        // Во время записи — продолжаем анализировать звук!
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(dataArray);
@@ -405,16 +418,14 @@
         const isAboveThreshold = avg > THRESHOLD;
 
         if (isAboveThreshold) {
-            lastSoundTime = Date.now(); // ← ОБНОВЛЯЕМ ВРЕМЯ ПОСЛЕДНЕГО ЗВУКА
+            lastSoundTime = Date.now();
         }
 
-        // Автозапись при обнаружении звука
         if (!isRecording && isAboveThreshold) {
             stopAnyPlayback();
             startRecording();
         }
 
-        // Остановка записи при тишине
         if (isRecording) {
             const silenceDuration = Date.now() - lastSoundTime;
             if (silenceDuration >= SILENCE_TIMEOUT) {
@@ -425,7 +436,6 @@
         hasSound = isAboveThreshold;
         updateUI();
 
-        // Продолжаем цикл
         requestAnimationFrame(checkSoundLoop);
     }
 
@@ -439,7 +449,7 @@
 
         isListening = true;
         lastSoundTime = Date.now();
-        checkSoundLoop(); // Запуск основного цикла
+        checkSoundLoop();
     }
 
     async function init() {
@@ -462,6 +472,7 @@
         }
     }
 
+    // ЗАПУСКАЕМ ИНИЦИАЛИЗАЦИЮ ПОСЛЕ ЗАГРУЗКИ DOM
     window.addEventListener('DOMContentLoaded', init);
 
     window.addEventListener('beforeunload', () => {
