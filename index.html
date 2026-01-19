@@ -1,577 +1,164 @@
-<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отслеживание шума при записи</title><script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.2/dist/speech-commands.min.js"></script><style>* {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<!doctype html><html lang="ru"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Voice Control Plugin</title><script type="module">import { pipeline } from './node_modules/@xenova/transformers/dist/transformers.min.js';
 
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+    window.WhisperPipeline = pipeline;
+    
+    console.log('Whisper pipeline загружен');</script><script src="plagin/voice-control-plugin.js"></script><style>body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .log {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      min-height: 50px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .log div {
+      margin: 5px 0;
+      padding: 5px;
+    }
+    .log .info {
+      color: #333;
+    }
+    .log .success {
+      color: #4caf50;
+    }
+    .log .error {
+      color: #f44336;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      background: #e3f2fd;
+      border-radius: 5px;
+      font-weight: bold;
+    }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>Voice Control Plugin</h1><p>Плагин автоматически записывает голос при обнаружении звука и воспроизводит запись. Во время воспроизведения можно сказать "стоп" или "хватит" для остановки.</p><button id="startBtn">Запустить</button> <button id="stopBtn" disabled="disabled">Остановить прослушивание</button><div class="status" id="status">Готово к запуску</div><div class="log" id="log"></div></div><script>const logEl = document.getElementById('log');
+  const statusEl = document.getElementById('status');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  
+  let currentRecordingBlob = null;
+  let plugin = null;
 
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 520px;
-            width: 100%;
-        }
+  function log(message, type = 'info') {
+    const className = type;
+    logEl.innerHTML += `<div class="${className}">[${new Date().toLocaleTimeString()}] ${message}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-        }
+  function updateStatus(text) {
+    statusEl.textContent = text;
+  }
 
-        .status {
-            text-align: center;
-            font-size: 18px;
-            margin-bottom: 20px;
-            padding: 10px;
-            border-radius: 10px;
-            background: #f5f5f5;
-        }
-
-        .status.recording {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .status.idle {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .sound-level-container {
-            margin: 30px 0;
-        }
-
-        .sound-level-label {
-            text-align: center;
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
-        }
-
-        .sound-level-value {
-            text-align: center;
-            font-size: 48px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-
-        .sound-level-bar {
-            width: 100%;
-            height: 30px;
-            background: #e0e0e0;
-            border-radius: 15px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .sound-level-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #4caf50 0%, #ffeb3b 50%, #f44336 100%);
-            width: 0%;
-            transition: width 0.1s ease;
-            border-radius: 15px;
-        }
-
-        .has-sound-indicator {
-            text-align: center;
-            margin: 20px 0;
-            font-size: 16px;
-            font-weight: bold;
-        }
-
-        .has-sound-indicator.active {
-            color: #4caf50;
-        }
-
-        .has-sound-indicator.inactive {
-            color: #999;
-        }
-
-        .settings {
-            margin-top: 20px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            background: #f7f7ff;
-            border: 1px solid #e0e0ff;
-            font-size: 14px;
-        }
-
-        .settings-title {
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: #444;
-        }
-
-        .settings-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        .settings-row label {
-            flex: 1;
-            color: #555;
-        }
-
-        .settings-row input[type="number"] {
-            width: 90px;
-            padding: 6px 8px;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-        }
-
-        .settings-hint {
-            font-size: 12px;
-            color: #777;
-            margin-bottom: 8px;
-        }
-
-        .settings button {
-            width: 100%;
-            margin-top: 4px;
-            padding: 8px 10px;
-            font-size: 14px;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 30px;
-        }
-
-        button {
-            flex: 1;
-            padding: 15px;
-            font-size: 16px;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-
-        .btn-start {
-            background: #4caf50;
-            color: white;
-        }
-
-        .btn-start:hover {
-            background: #45a049;
-        }
-
-        .btn-start:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .btn-stop {
-            background: #f44336;
-            color: white;
-        }
-
-        .btn-stop:hover {
-            background: #da190b;
-        }
-
-        .btn-stop:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-            display: none;
-        }
-
-        .error.show {
-            display: block;
-        }
-
-        .wave-animation {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 4px;
-            height: 60px;
-            margin: 20px 0;
-        }
-
-        .wave-bar {
-            width: 4px;
-            background: #667eea;
-            border-radius: 2px;
-            animation: wave 1s ease-in-out infinite;
-        }
-
-        .wave-bar:nth-child(1) { animation-delay: 0s; }
-        .wave-bar:nth-child(2) { animation-delay: 0.1s; }
-        .wave-bar:nth-child(3) { animation-delay: 0.2s; }
-        .wave-bar:nth-child(4) { animation-delay: 0.3s; }
-        .wave-bar:nth-child(5) { animation-delay: 0.4s; }
-
-        @keyframes wave {
-            0%, 100% { height: 20px; }
-            50% { height: 60px; }
-        }
-
-        .wave-animation.hidden {
-            display: none;
-        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🎤 Отслеживание шума</h1><div class="status idle" id="status">Готов к записи</div><div class="sound-level-container"><div class="sound-level-label">Уровень звука</div><div class="sound-level-value" id="soundLevel">0</div><div class="sound-level-bar"><div class="sound-level-fill" id="soundLevelFill"></div></div></div><div class="has-sound-indicator inactive" id="hasSoundIndicator">🔇 Нет звука</div><div class="settings"><div class="settings-title">Настройки детектора шума</div><div class="settings-row"><label for="thresholdInput">Порог уровня шума (0–255):</label> <input id="thresholdInput" type="number" min="0" max="255" step="1"/></div><div class="settings-row"><label for="silenceTimeoutInput">Таймаут тишины (мс, после которого остановить запись):</label> <input id="silenceTimeoutInput" type="number" min="100" step="100"/></div><div class="settings-hint">По умолчанию порог = 30, таймаут = 3000 мс (3 секунды).</div><button class="btn-start" type="button" onclick="saveSettings()">Сохранить настройки</button></div><div class="wave-animation hidden" id="waveAnimation"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div><div class="button-group"><button class="btn-start" id="btnStart" onclick="startRecording()">Начать запись</button> <button class="btn-stop" id="btnStop" onclick="stopRecording()" disabled="disabled">Остановить</button></div><div class="error" id="error"></div><div id="info"></div></div><script>const DEFAULT_THRESHOLD = 30;
-    const DEFAULT_SILENCE_TIMEOUT = 3000;
-
-    let THRESHOLD = DEFAULT_THRESHOLD;
-    let SILENCE_TIMEOUT = DEFAULT_SILENCE_TIMEOUT;
-
-    let audioContext = null;
-    let analyser = null;
-    let stream = null;
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let isRecording = false;
-    let isListening = false;
-    let playbackAudio = null;
-
-    let tfModel = null;
-    let tfListener = null;
-    let isPlaybackInterruptible = false;
-
-    let soundLevel = 0;
-    let hasSound = false;
-    let lastSoundTime = Date.now();
-
-    function getUserMedia(constraints) {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            return navigator.mediaDevices.getUserMedia(constraints);
-        }
-        const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-        if (!getUserMedia) {
-            return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS или localhost.'));
-        }
-        return new Promise((resolve, reject) => {
-            getUserMedia.call(navigator, constraints, resolve, reject);
-        });
+  // Ждём загрузки плагина
+  function initPlugin() {
+    if (typeof VoiceControlPlugin === 'undefined') {
+      setTimeout(initPlugin, 100);
+      return;
     }
 
-    function showError(message) {
-        const errorEl = document.getElementById('error');
-        errorEl.textContent = message;
-        errorEl.classList.add('show');
-        setTimeout(() => errorEl.classList.remove('show'), 5000);
-    }
+    plugin = new VoiceControlPlugin({
+      onListeningStart: () => {
+        log('Начал слушать микрофон', 'success');
+        updateStatus('Слушаю микрофон...');
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      },
+      onRecordingStart: () => {
+        log('Начал запись', 'success');
+        updateStatus('Идёт запись...');
+      },
+      onRecordingEnd: (blob) => {
+        log(`Запись завершена (размер: ${(blob.size / 1024).toFixed(2)} KB)`, 'success');
+        updateStatus('Запись завершена');
+        currentRecordingBlob = blob;
 
-    async function startInterruptionListener() {
-        if (isPlaybackInterruptible) {
-            return;
-        }
+        log('Отправляю запись в плагин для воспроизведения...', 'info');
+        plugin.playAudio(blob);
+      },
+      onPlaybackStart: () => {
+        log('Начал воспроизведение', 'success');
+        updateStatus('Воспроизведение... (скажите "стоп" или "хватит" для остановки)');
+      },
+      onPlaybackEnd: () => {
+        log('Воспроизведение завершено', 'success');
+        updateStatus('Воспроизведение завершено. Слушаю микрофон...');
+      },
+      onPlaybackStopped: () => {
+        log('Воспроизведение остановлено по команде', 'success');
+        updateStatus('Воспроизведение остановлено. Слушаю микрофон...');
+      },
+      silenceTimeout: 3000,
+      maxRecordTime: 100000,
+      threshold: 30,
+      stopCommands: ['стоп', 'хватит'],
+      whisperModel: 'Xenova/whisper-tiny',
+      recognitionInterval: 1000
+    });
 
-        if (typeof speechCommands === 'undefined') {
-            console.error('speechCommands не определён');
-            showError('Модель распознавания недоступна');
-            startSimpleInterruption();
-            return;
-        }
+    startBtn.addEventListener('click', async () => {
+      try {
+        log('Инициализация плагина...', 'info');
+        await plugin.start();
+      } catch (err) {
+        log(`Ошибка: ${err.message}`, 'error');
+        console.error(err);
+      }
+    });
 
-        try {
-            if (!tfModel) {
-                document.getElementById('info').textContent = 'Загрузка модели распознавания...';
-                console.log('Загружаем Speech Commands модель...');
-                tfModel = await speechCommands.create('BROWSER_FFT');
-            }
-
-            isPlaybackInterruptible = true;
-            document.getElementById('info').textContent = 'Слушаю команду "stop"...';
-
-            tfModel.listen(result => {
-                if (!isPlaybackInterruptible) return;
-
-                const labels = tfModel.wordLabels();
-                const stopIndex = labels.indexOf('stop');
-                if (stopIndex === -1) return;
-
-                const confidence = result.scores[stopIndex];
-                console.log(`"stop" confidence: ${confidence.toFixed(3)}`);
-
-                if (confidence > 0.75) {
-                    console.log('Обнаружено: STOP');
-                    document.getElementById('info').textContent = 'Команда "stop" обнаружена!';
-                    stopAnyPlayback();
-                    isPlaybackInterruptible = false;
-                }
-            }, {
-                probabilityThreshold: 0.75,
-                invokeCallbackOnNoise: true
-            });
-
-        } catch (err) {
-            console.error('TF.js ошибка:', err);
-            showError('Не удалось запустить распознавание речи: ' + err.message);
-            startSimpleInterruption();
-        }
-    }
-
-    function stopInterruptionListener() {
-        if (tfModel && isPlaybackInterruptible) {
-            tfModel.stopListening();
-        }
-        isPlaybackInterruptible = false;
-    }
-
-    function startSimpleInterruption() {
-        if (!analyser) return;
-        const check = () => {
-            if (!isPlaybackInterruptible || !playbackAudio || playbackAudio.paused) return;
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-            const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
-            if (avg > THRESHOLD) {
-                console.log('Прерывание по звуку');
-                stopAnyPlayback();
-                isPlaybackInterruptible = false;
-            } else {
-                requestAnimationFrame(check);
-            }
-        };
-        check();
-    }
-
-    function updateUI() {
-        const statusEl = document.getElementById('status');
-        const soundLevelEl = document.getElementById('soundLevel');
-        const soundLevelFillEl = document.getElementById('soundLevelFill');
-        const hasSoundIndicatorEl = document.getElementById('hasSoundIndicator');
-        const waveAnimationEl = document.getElementById('waveAnimation');
-
-        if (isRecording) {
-            statusEl.textContent = 'Идёт запись...';
-            statusEl.className = 'status recording';
-            waveAnimationEl.classList.remove('hidden');
-        } else if (playbackAudio && !playbackAudio.paused) {
-            statusEl.textContent = 'Воспроизведение ответа...';
-            statusEl.className = 'status idle';
-            waveAnimationEl.classList.add('hidden');
-        } else if (isListening) {
-            statusEl.textContent = 'Слушаю... Говорите';
-            statusEl.className = 'status idle';
-            waveAnimationEl.classList.add('hidden');
-        } else {
-            statusEl.textContent = 'Готов к записи';
-            statusEl.className = 'status idle';
-            waveAnimationEl.classList.add('hidden');
-        }
-
-        soundLevelEl.textContent = soundLevel;
-        const percentage = Math.min((soundLevel / 255) * 100, 100);
-        soundLevelFillEl.style.width = percentage + '%';
-
-        if (hasSound) {
-            hasSoundIndicatorEl.textContent = 'Обнаружен звук';
-            hasSoundIndicatorEl.className = 'has-sound-indicator active';
-        } else {
-            hasSoundIndicatorEl.textContent = 'Нет звука';
-            hasSoundIndicatorEl.className = 'has-sound-indicator inactive';
-        }
-    }
-
-    function stopAnyPlayback() {
-        if (playbackAudio && !playbackAudio.paused) {
-            playbackAudio.pause();
-            playbackAudio.currentTime = 0;
-        }
-        stopInterruptionListener();
-
-        isRecording = false;
-        isListening = true;
-        updateUI();
-        requestAnimationFrame(checkSoundLoop);
-    }
-
-    function startRecording() {
-        if (isRecording) return;
-
-        console.log('Начинаем запись');
-        const infoEl = document.getElementById('info');
-        infoEl.textContent = 'Начинаем запись';
-        isRecording = true;
-        audioChunks = [];
-
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
-            console.log('Запись завершена, размер:', audioBlob.size, 'байт');
-            infoEl.textContent = 'Запись завершена';
-
-            if (playbackAudio) {
-                URL.revokeObjectURL(playbackAudio.src);
-            }
-
-            const url = URL.createObjectURL(audioBlob);
-            playbackAudio = new Audio(url);
-            playbackAudio.onended = () => {
-                URL.revokeObjectURL(url);
-                stopAnyPlayback();
-            };
-
-            playbackAudio.play().catch(e => {
-                console.warn('Не удалось воспроизвести:', e);
-                showError('Не удалось воспроизвести аудио');
-                stopAnyPlayback();
-            });
-
-            startInterruptionListener();
-        };
-
-        mediaRecorder.start();
-        updateUI();
-    }
-
-    function stopRecording() {
-        if (!isRecording) return;
-
-        console.log('Останавливаем запись');
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-        }
-        isRecording = false;
-        updateUI();
-    }
-
-    /**
-     * Основной цикл анализа аудиопотока:
-     * - измеряет средний уровень,
-     * - запускает запись при превышении порога,
-     * - останавливает запись после длительной тишины.
-     */
-    function checkSoundLoop() {
-        if (!isListening || (playbackAudio && !playbackAudio.paused)) {
-            return;
-        }
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(dataArray);
-
-        const avg = Math.round(dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
-        soundLevel = avg;
-        const isAboveThreshold = avg > THRESHOLD;
-
-        if (isAboveThreshold) {
-            lastSoundTime = Date.now();
-        }
-
-        if (!isRecording && isAboveThreshold) {
-            stopAnyPlayback();
-            startRecording();
-        }
-
-        if (isRecording) {
-            const silenceDuration = Date.now() - lastSoundTime;
-            if (silenceDuration >= SILENCE_TIMEOUT) {
-                stopRecording();
-            }
-        }
-
-        hasSound = isAboveThreshold;
-        updateUI();
-
-        requestAnimationFrame(checkSoundLoop);
-    }
-
-    function setupAudioAnalyzer(stream) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-
-        const microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-
-        isListening = true;
-        lastSoundTime = Date.now();
-        checkSoundLoop();
-    }
-
-
-    function initSettingsUI() {
-        const thresholdInput = document.getElementById('thresholdInput');
-        const silenceTimeoutInput = document.getElementById('silenceTimeoutInput');
-
-        thresholdInput.value = THRESHOLD;
-        silenceTimeoutInput.value = SILENCE_TIMEOUT;
-    }
-
-    function saveSettings() {
-        const thresholdInput = document.getElementById('thresholdInput');
-        const silenceTimeoutInput = document.getElementById('silenceTimeoutInput');
-        const infoEl = document.getElementById('info');
-
-        const parsedThreshold = Number(thresholdInput.value);
-        const parsedTimeout = Number(silenceTimeoutInput.value);
-
-        if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 255) {
-            showError('Порог должен быть числом от 0 до 255');
-            thresholdInput.value = THRESHOLD;
-            return;
-        }
-
-        if (Number.isNaN(parsedTimeout) || parsedTimeout <= 0) {
-            showError('Таймаут тишины должен быть положительным числом (в мс)');
-            silenceTimeoutInput.value = SILENCE_TIMEOUT;
-            return;
-        }
-
-        THRESHOLD = parsedThreshold;
-        SILENCE_TIMEOUT = parsedTimeout;
-
-        infoEl.textContent = `Настройки сохранены: порог = ${THRESHOLD}, таймаут тишины = ${SILENCE_TIMEOUT} мс`;
-        console.log('Обновлённые настройки:', { THRESHOLD, SILENCE_TIMEOUT });
-    }
-
-
-    async function init() {
-        try {
-            document.querySelector('.button-group').style.display = 'none';
-
-            stream = await getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
-
-            setupAudioAnalyzer(stream);
-            updateUI();
-            initSettingsUI();
-        } catch (err) {
-            showError('Ошибка доступа к микрофону: ' + err.message);
-            console.error(err);
-        }
-    }
-
-    window.addEventListener('DOMContentLoaded', init);
+    stopBtn.addEventListener('click', () => {
+      plugin.stopListening();
+      log('Прослушивание микрофона остановлено', 'info');
+      updateStatus('Прослушивание остановлено');
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    });
 
     window.addEventListener('beforeunload', () => {
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        if (audioContext) audioContext.close();
-        if (playbackAudio) {
-            URL.revokeObjectURL(playbackAudio.src);
-        }
-        stopInterruptionListener();
-    });</script></body></html>
+      if (plugin) {
+        plugin.destroy();
+      }
+    });
+
+    log('Плагин готов к использованию', 'success');
+  }
+
+  // Запускаем инициализацию после загрузки страницы
+  window.addEventListener('DOMContentLoaded', () => {
+    log('Загрузка Whisper...', 'info');
+    initPlugin();
+  });</script></body></html>
