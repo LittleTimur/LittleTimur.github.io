@@ -1,4 +1,4 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MealDrop - Audio Scheduler</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Hind:wght@300;400;500;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet"><style>* { box-sizing: border-box; margin: 0; padding: 0; }
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MealDrop - Voice Synthesis</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Hind:wght@300;400;500;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet"><style>* { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Montserrat', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -44,11 +44,14 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
-        .btn:active {
-            transform: translateY(0);
-        }
+        .btn:active { transform: translateY(0); }
         .btn.stop {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
         .timer {
             margin-top: 25px;
@@ -67,6 +70,7 @@
             margin-bottom: 8px;
             color: #555;
             font-size: 14px;
+            text-align: left;
         }
         .settings input {
             width: 100%;
@@ -93,26 +97,50 @@
         .indicator.active {
             background: #4ade80;
             box-shadow: 0 0 10px #4ade80;
-        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🔔 MealDrop Audio</h1><div class="status"><span class="indicator" id="indicator"></span> <span id="statusText">Ожидание запуска...</span></div><button class="btn" id="toggleBtn">▶ Запустить</button><div class="timer" id="timer">30</div><div style="color: #999; font-size: 12px; margin-top: 5px;">секунд до следующего звука</div><div class="settings"><label>Интервал (секунды):</label> <input type="number" id="intervalInput" value="30" min="5" max="300"></div></div><script>// Короткая мелодия в base64 ( WAV, ~0.3 сек, тихий "бинг")
-    const MELODY_BASE64 = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
-
-    // Более заметная мелодия (можно заменить на свою)
-    // Для примера используем генерацию через Web Audio API
+        }
+        .log {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #666;
+            max-height: 100px;
+            overflow-y: auto;
+            text-align: left;
+        }</style><script defer="defer" src="/index.js"></script></head><body><div class="container"><h1>🔊 Voice Synthesis</h1><div class="status"><span class="indicator" id="indicator"></span> <span id="statusText">Ожидание запуска...</span></div><button class="btn" id="toggleBtn">▶ Запустить</button><div class="timer" id="timer">30</div><div style="color: #999; font-size: 12px; margin-top: 5px;">секунд до следующего запроса</div><div class="settings"><label>Интервал (секунды):</label> <input type="number" id="intervalInput" value="30" min="5" max="300"></div><div class="log" id="log"></div></div><script>// Конфигурация API
+    const API_CONFIG = {
+        url: 'https://test-api.tatar.ru/public/api/v1/users/62ebcee7064d5c792f8b456e/voice-assistant/synthesis.json',
+        headers: {
+            'accept': 'application/ld+json',
+            'authorization': 'Bearer M9s1JUY2mOvOnTu3MeQw7KJpwh+R+SWdtLCxx7FtSrDqrHPKg8K2FM8lRkkXvXTA6mmMieg00eiWCf8nsJVt7GDDwcivW3Vgv7E7gMfMqrT+DDbVuUFMIA/3Wjokp5dq',
+            'Content-Type': 'application/json'
+        }
+    };
 
     let audioContext = null;
     let intervalId = null;
     let countdownId = null;
     let isPlaying = false;
     let intervalSeconds = 30;
-    let timeLeft = 5;
+    let timeLeft = 30;
+    let audioQueue = []; // Очередь аудио для последовательного воспроизведения
 
     const toggleBtn = document.getElementById('toggleBtn');
     const statusText = document.getElementById('statusText');
     const indicator = document.getElementById('indicator');
     const timerDisplay = document.getElementById('timer');
     const intervalInput = document.getElementById('intervalInput');
+    const logEl = document.getElementById('log');
 
-    // Инициализация AudioContext (только после клика!)
+    function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logEl.innerHTML += `<div>[${time}] ${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+        console.log(`[Synthesis] ${msg}`);
+    }
+
+    // Инициализация AudioContext
     function initAudio() {
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -122,33 +150,121 @@
         }
     }
 
-    // Воспроизведение короткой мелодии через Web Audio API
-    function playMelody() {
+    // Воспроизведение аудио из Blob
+    async function playAudioBlob(blob) {
         if (!audioContext) return;
 
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
 
-        // Параметры мелодии: два тона для "бинг-бонг"
-        oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
-        oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.15); // A4
-
-        // Плавное затухание
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-
-        // Визуальный фидбек
-        timerDisplay.style.transform = 'scale(1.2)';
-        setTimeout(() => timerDisplay.style.transform = 'scale(1)', 200);
+        return new Promise(resolve => {
+            source.onended = resolve;
+        });
     }
 
-    // Обновление таймера
+    // Запрос к API синтеза
+    async function fetchSynthesis(message) {
+        log(`📤 Запрос: "${message}"`);
+
+        const response = await fetch(API_CONFIG.url, {
+            method: 'POST',
+            headers: API_CONFIG.headers,
+            body: JSON.stringify({ message })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'No error details');
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        // Пробуем получить аудио (blob) или текст
+        const contentType = response.headers.get('content-type');
+
+        if (contentType?.includes('audio')) {
+            log('🎵 Получено аудио');
+            return await response.blob();
+        } else {
+            // Если вернулся JSON с ссылкой на аудио или base64
+            const data = await response.json().catch(() => ({}));
+            log(`📄 Получен ответ: ${JSON.stringify(data).slice(0, 100)}...`);
+
+            // Если есть audio_url или audio_data - обрабатываем
+            if (data.audio_url) {
+                log('🔗 Загрузка аудио по ссылке...');
+                const audioResp = await fetch(data.audio_url);
+                return await audioResp.blob();
+            }
+            if (data.audio_data) {
+                // Base64 audio
+                const binary = atob(data.audio_data);
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                return new Blob([bytes], { type: 'audio/wav' });
+            }
+
+            // Если просто текст - озвучиваем через Web Speech API (fallback)
+            if (data.text || message) {
+                log('🗣️ Используем браузерный синтез');
+                return await synthesizeWithBrowser(data.text || message);
+            }
+        }
+
+        throw new Error('Не удалось получить аудио из ответа');
+    }
+
+    // Fallback: браузерный SpeechSynthesis
+    async function synthesizeWithBrowser(text) {
+        return new Promise((resolve, reject) => {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ru-RU';
+                utterance.onend = () => resolve(null); // null = не нужно дополнительно играть
+                utterance.onerror = reject;
+                speechSynthesis.speak(utterance);
+            } else {
+                reject(new Error('SpeechSynthesis не поддерживается'));
+            }
+        });
+    }
+
+    // Основная функция: запрос + воспроизведение
+    async function triggerSynthesis() {
+        if (!isPlaying) return;
+
+        const message = new Date().toLocaleString('ru-RU', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+
+        try {
+            statusText.textContent = 'Синтез...';
+            indicator.classList.add('active');
+
+            const audioResult = await fetchSynthesis(message);
+
+            // Если вернули blob - играем, если null (browser synthesis) - уже играет
+            if (audioResult instanceof Blob) {
+                await playAudioBlob(audioResult);
+            }
+
+            log('✅ Воспроизведено');
+        } catch (error) {
+            log(`❌ Ошибка: ${error.message}`);
+            statusText.textContent = 'Ошибка';
+            indicator.classList.remove('active');
+        } finally {
+            if (isPlaying) {
+                statusText.textContent = `Активно: каждые ${intervalSeconds} сек`;
+                indicator.classList.add('active');
+            }
+        }
+    }
+
+    // Таймер обратного отсчёта
     function startCountdown() {
         timeLeft = intervalSeconds;
         timerDisplay.textContent = timeLeft;
@@ -156,7 +272,6 @@
         countdownId = setInterval(() => {
             timeLeft--;
             timerDisplay.textContent = timeLeft;
-
             if (timeLeft <= 0) {
                 timeLeft = intervalSeconds;
                 timerDisplay.textContent = timeLeft;
@@ -172,28 +287,32 @@
     }
 
     // Запуск цикла
-    function startScheduler() {
+    async function startScheduler() {
         initAudio();
         isPlaying = true;
 
-        // Сразу проигрываем первый раз
-        playMelody();
+        // Первый запуск сразу
+        await triggerSynthesis();
         startCountdown();
 
-        // Затем повторяем по интервалу
+        // Затем по интервалу
         intervalId = setInterval(() => {
-            playMelody();
+            if (isPlaying) {
+                triggerSynthesis();
+            }
         }, intervalSeconds * 1000);
 
-        // Обновляем UI
+        // UI
         toggleBtn.textContent = '⏹ Остановить';
         toggleBtn.classList.add('stop');
-        statusText.textContent = 'Активно: звук каждые ' + intervalSeconds + ' сек';
+        statusText.textContent = `Активно: каждые ${intervalSeconds} сек`;
         indicator.classList.add('active');
         intervalInput.disabled = true;
+        toggleBtn.disabled = false;
+        log('🚀 Запущено');
     }
 
-    // Остановка цикла
+    // Остановка
     function stopScheduler() {
         isPlaying = false;
 
@@ -203,46 +322,57 @@
         }
         stopCountdown();
 
-        // Обновляем UI
+        // UI
         toggleBtn.textContent = '▶ Запустить';
         toggleBtn.classList.remove('stop');
         statusText.textContent = 'Остановлено';
         indicator.classList.remove('active');
         intervalInput.disabled = false;
         timerDisplay.textContent = intervalSeconds;
+        log('⏹ Остановлено');
     }
 
-    // Переключение кнопки
-    toggleBtn.addEventListener('click', () => {
+    // Обработчики
+    toggleBtn.addEventListener('click', async () => {
+        toggleBtn.disabled = true;
+
         if (isPlaying) {
             stopScheduler();
+            toggleBtn.disabled = false;
         } else {
-            // Читаем интервал из input
             const newInterval = parseInt(intervalInput.value);
             if (newInterval >= 5 && newInterval <= 300) {
                 intervalSeconds = newInterval;
             }
-            startScheduler();
+            await startScheduler();
+            // Кнопка уже включена в startScheduler
         }
     });
 
-    // Обновление интервала на лету (если запущено)
     intervalInput.addEventListener('change', () => {
         const newInterval = parseInt(intervalInput.value);
         if (newInterval >= 5 && newInterval <= 300) {
             intervalSeconds = newInterval;
+            timerDisplay.textContent = newInterval;
             if (isPlaying) {
-                // Перезапускаем с новым интервалом
+                // Перезапуск с новым интервалом
                 stopScheduler();
                 startScheduler();
             }
-            timerDisplay.textContent = newInterval;
         }
     });
 
-    // Предотвращаем ввод некорректных значений
     intervalInput.addEventListener('input', (e) => {
         let val = parseInt(e.target.value);
         if (isNaN(val) || val < 5) e.target.value = 5;
         if (val > 300) e.target.value = 300;
-    });</script></body></html>
+    });
+
+    // Предзагрузка: разблокировка аудио при первом клике на странице
+    document.addEventListener('click', () => {
+        if (!audioContext) {
+            initAudio();
+        }
+    }, { once: true });
+
+    log('📦 Готов к работе');</script></body></html>
