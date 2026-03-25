@@ -1,15 +1,285 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MealDrop</title>
-
+    <title>MealDrop - Audio Scheduler</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind:wght@300;400;500;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .status {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-family: inherit;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        .btn.stop {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .timer {
+            margin-top: 25px;
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            font-family: 'Hind', sans-serif;
+        }
+        .settings {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .settings label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-size: 14px;
+        }
+        .settings input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .settings input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+            display: inline-block;
+            margin-right: 8px;
+            transition: background 0.3s;
+        }
+        .indicator.active {
+            background: #4ade80;
+            box-shadow: 0 0 10px #4ade80;
+        }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
+<div class="container">
+    <h1>🔔 MealDrop Audio</h1>
+    <div class="status">
+        <span class="indicator" id="indicator"></span>
+        <span id="statusText">Ожидание запуска...</span>
+    </div>
+
+    <button class="btn" id="toggleBtn">▶ Запустить</button>
+
+    <div class="timer" id="timer">30</div>
+    <div style="color: #999; font-size: 12px; margin-top: 5px;">секунд до следующего звука</div>
+
+    <div class="settings">
+        <label>Интервал (секунды):</label>
+        <input type="number" id="intervalInput" value="30" min="5" max="300">
+    </div>
+</div>
+
+<script>
+    // Короткая мелодия в base64 ( WAV, ~0.3 сек, тихий "бинг")
+    const MELODY_BASE64 = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+    // Более заметная мелодия (можно заменить на свою)
+    // Для примера используем генерацию через Web Audio API
+
+    let audioContext = null;
+    let intervalId = null;
+    let countdownId = null;
+    let isPlaying = false;
+    let intervalSeconds = 30;
+    let timeLeft = 30;
+
+    const toggleBtn = document.getElementById('toggleBtn');
+    const statusText = document.getElementById('statusText');
+    const indicator = document.getElementById('indicator');
+    const timerDisplay = document.getElementById('timer');
+    const intervalInput = document.getElementById('intervalInput');
+
+    // Инициализация AudioContext (только после клика!)
+    function initAudio() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+    }
+
+    // Воспроизведение короткой мелодии через Web Audio API
+    function playMelody() {
+        if (!audioContext) return;
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        // Параметры мелодии: два тона для "бинг-бонг"
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+        oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.15); // A4
+
+        // Плавное затухание
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.3);
+
+        // Визуальный фидбек
+        timerDisplay.style.transform = 'scale(1.2)';
+        setTimeout(() => timerDisplay.style.transform = 'scale(1)', 200);
+    }
+
+    // Обновление таймера
+    function startCountdown() {
+        timeLeft = intervalSeconds;
+        timerDisplay.textContent = timeLeft;
+
+        countdownId = setInterval(() => {
+            timeLeft--;
+            timerDisplay.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                timeLeft = intervalSeconds;
+                timerDisplay.textContent = timeLeft;
+            }
+        }, 1000);
+    }
+
+    function stopCountdown() {
+        if (countdownId) {
+            clearInterval(countdownId);
+            countdownId = null;
+        }
+    }
+
+    // Запуск цикла
+    function startScheduler() {
+        initAudio();
+        isPlaying = true;
+
+        // Сразу проигрываем первый раз
+        playMelody();
+        startCountdown();
+
+        // Затем повторяем по интервалу
+        intervalId = setInterval(() => {
+            playMelody();
+        }, intervalSeconds * 1000);
+
+        // Обновляем UI
+        toggleBtn.textContent = '⏹ Остановить';
+        toggleBtn.classList.add('stop');
+        statusText.textContent = 'Активно: звук каждые ' + intervalSeconds + ' сек';
+        indicator.classList.add('active');
+        intervalInput.disabled = true;
+    }
+
+    // Остановка цикла
+    function stopScheduler() {
+        isPlaying = false;
+
+        if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+        stopCountdown();
+
+        // Обновляем UI
+        toggleBtn.textContent = '▶ Запустить';
+        toggleBtn.classList.remove('stop');
+        statusText.textContent = 'Остановлено';
+        indicator.classList.remove('active');
+        intervalInput.disabled = false;
+        timerDisplay.textContent = intervalSeconds;
+    }
+
+    // Переключение кнопки
+    toggleBtn.addEventListener('click', () => {
+        if (isPlaying) {
+            stopScheduler();
+        } else {
+            // Читаем интервал из input
+            const newInterval = parseInt(intervalInput.value);
+            if (newInterval >= 5 && newInterval <= 300) {
+                intervalSeconds = newInterval;
+            }
+            startScheduler();
+        }
+    });
+
+    // Обновление интервала на лету (если запущено)
+    intervalInput.addEventListener('change', () => {
+        const newInterval = parseInt(intervalInput.value);
+        if (newInterval >= 5 && newInterval <= 300) {
+            intervalSeconds = newInterval;
+            if (isPlaying) {
+                // Перезапускаем с новым интервалом
+                stopScheduler();
+                startScheduler();
+            }
+            timerDisplay.textContent = newInterval;
+        }
+    });
+
+    // Предотвращаем ввод некорректных значений
+    intervalInput.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value);
+        if (isNaN(val) || val < 5) e.target.value = 5;
+        if (val > 300) e.target.value = 300;
+    });
+</script>
 </body>
 </html>
