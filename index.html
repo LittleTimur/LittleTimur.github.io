@@ -1,4 +1,4 @@
-<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MealDrop - Voice Assistant</title><style>* {
+<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MealDrop - Voice Assistant</title><script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script><style>* {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -368,9 +368,50 @@
     }
 
     async function convertWebmToMp3(webmBlob) {
-        // Упрощённая версия - можно использовать тот же код что в SalutMessages.vue
-        // Для продакшена лучше использовать серверную конвертацию
-        return webmBlob; // Возвращаем как есть для простоты
+        return new Promise(async (resolve, reject) => {
+            try {
+                const audioContext = voicePlugin?.audioContext || new (window.AudioContext || window.webkitAudioContext)();
+                const arrayBuffer = await webmBlob.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                const channels = audioBuffer.numberOfChannels;
+                const sampleRate = audioBuffer.sampleRate;
+                const samples = audioBuffer.getChannelData(0);
+
+                // Конвертация Float32 в Int16
+                const samplesInt16 = new Int16Array(samples.length);
+                for (let i = 0; i < samples.length; i++) {
+                    const s = Math.max(-1, Math.min(1, samples[i]));
+                    samplesInt16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+
+                // Инициализация MP3 энкодера
+                const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
+                const mp3Data = [];
+
+                // Кодирование блоками по 1152 сэмпла
+                const sampleBlockSize = 1152;
+                for (let i = 0; i < samplesInt16.length; i += sampleBlockSize) {
+                    const sampleChunk = samplesInt16.subarray(i, i + sampleBlockSize);
+                    const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                    if (mp3buf.length > 0) {
+                        mp3Data.push(mp3buf);
+                    }
+                }
+
+                // Финализация
+                const mp3buf = mp3encoder.flush();
+                if (mp3buf.length > 0) {
+                    mp3Data.push(mp3buf);
+                }
+
+                const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
+                resolve(mp3Blob);
+            } catch (error) {
+                console.error('Ошибка конвертации в MP3:', error);
+                reject(error);
+            }
+        });
     }
 
     // ============================================
