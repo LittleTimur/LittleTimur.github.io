@@ -69,6 +69,11 @@ module.exports = {
                     from: "./src/img",
                     to: "img",
                     noErrorOnMissing: true
+                },
+                {
+                    from: "./src/voice-control-plugin.js",
+                    to: "voice-control-plugin.js",
+                    noErrorOnMissing: true
                 }
             ]
         })
