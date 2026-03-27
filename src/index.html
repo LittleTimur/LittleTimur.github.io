@@ -1,417 +1,649 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MealDrop - Voice Synthesis</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Hind:wght@300;400;500;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MealDrop - Voice Assistant</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Montserrat', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .status-bar {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            min-height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
         }
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 24px;
-        }
-        .status {
-            color: #666;
-            margin-bottom: 30px;
+
+        .status-text {
             font-size: 14px;
-            min-height: 20px;
+            color: rgba(255, 255, 255, 0.8);
         }
-        .btn {
+
+        .status-text.recording {
+            color: #ff4757;
+            animation: pulse 1s infinite;
+        }
+
+        .status-text.playing {
+            color: #2ed573;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            padding: 15px 40px;
             font-size: 16px;
             font-weight: 600;
-            border-radius: 50px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            font-family: inherit;
-        }
-        .btn:hover {
-            transform: translateY(-2px);
+            margin: 0 auto 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
-        .btn:active { transform: translateY(0); }
-        .btn.stop {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+
+        .main-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
         }
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+
+        .main-button:active {
+            transform: scale(0.95);
         }
-        .timer {
-            margin-top: 25px;
-            font-size: 32px;
-            font-weight: 700;
-            color: #667eea;
-            font-family: 'Hind', sans-serif;
+
+        .main-button.active {
+            background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+            box-shadow: 0 10px 30px rgba(255, 71, 87, 0.4);
         }
-        .settings {
-            margin-top: 20px;
+
+        .main-button.playing {
+            background: linear-gradient(135deg, #2ed573 0%, #7bed9f 100%);
+            box-shadow: 0 10px 30px rgba(46, 213, 115, 0.4);
+        }
+
+        .messages-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .message-user {
+            background: rgba(102, 126, 234, 0.3);
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message-assistant {
+            background: rgba(255, 255, 255, 0.1);
+            margin-right: auto;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 5px;
+        }
+
+        .settings-section {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
             padding-top: 20px;
-            border-top: 1px solid #eee;
+            margin-top: 20px;
         }
-        .settings label {
+
+        .settings-section h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .setting-item {
+            margin-bottom: 15px;
+        }
+
+        .setting-item label {
             display: block;
-            margin-bottom: 8px;
-            color: #555;
-            font-size: 14px;
-            text-align: left;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 5px;
         }
-        .settings input {
+
+        .setting-item input {
             width: 100%;
             padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            font-size: 16px;
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .settings input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        .indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ccc;
-            display: inline-block;
-            margin-right: 8px;
-            transition: background 0.3s;
-        }
-        .indicator.active {
-            background: #4ade80;
-            box-shadow: 0 0 10px #4ade80;
-        }
-        .log {
-            margin-top: 15px;
-            padding: 10px;
-            background: #f8f9fa;
             border-radius: 8px;
-            font-size: 11px;
-            color: #666;
-            max-height: 100px;
-            overflow-y: auto;
-            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            font-size: 14px;
+        }
+
+        .setting-item input:focus {
+            outline: none;
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 15px;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            animation: typing-bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing-bounce {
+            0%, 80%, 100% {
+                opacity: 0.4;
+                transform: scale(0.8);
+            }
+            40% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .error-message {
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid rgba(255, 71, 87, 0.5);
+            color: #ff6b81;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🔊 Voice Synthesis</h1>
-    <div class="status">
-        <span class="indicator" id="indicator"></span>
-        <span id="statusText">Ожидание запуска...</span>
+    <h1>🎤 Голосовой Ассистент</h1>
+
+    <div class="status-bar">
+        <span id="statusText" class="status-text">Нажмите кнопку для запуска</span>
     </div>
 
-    <button class="btn" id="toggleBtn">▶ Запустить</button>
+    <button id="mainButton" class="main-button">
+        Запустить
+    </button>
 
-    <div class="timer" id="timer">30</div>
-    <div style="color: #999; font-size: 12px; margin-top: 5px;">секунд до следующего запроса</div>
-
-    <div class="settings">
-        <label>Интервал (секунды):</label>
-        <input type="number" id="intervalInput" value="30" min="5" max="300">
+    <div class="messages-container" id="messagesContainer">
+        <div style="text-align: center; color: rgba(255,255,255,0.4); padding: 20px;">
+            Сообщения появятся здесь
+        </div>
     </div>
 
-    <div class="log" id="log"></div>
+    <div class="settings-section">
+        <h3>⚙️ Настройки</h3>
+
+        <div class="setting-item">
+            <label>Порог громкости (0-100)</label>
+            <input type="range" id="thresholdInput" min="0" max="100" value="30">
+            <span id="thresholdValue">30</span>
+        </div>
+
+        <div class="setting-item">
+            <label>Время тишины (мс)</label>
+            <input type="number" id="silenceInput" value="1000" min="500" max="5000">
+        </div>
+
+        <div class="setting-item">
+            <label>User ID</label>
+            <input type="text" id="userIdInput" value="5a4bd939064d5c372b8b4578">
+        </div>
+    </div>
 </div>
 
+<script src="voice-control-plugin.js"></script>
 <script>
-    // Конфигурация API
-    const API_CONFIG = {
-        url: 'https://test-api.tatar.ru/public/api/v1/users/62ebcee7064d5c792f8b456e/voice-assistant/synthesis.json',
-        headers: {
-            'accept': 'application/ld+json',
-            'authorization': 'Bearer M9s1JUY2mOvOnTu3MeQw7KJpwh+R+SWdtLCxx7FtSrDqrHPKg8K2FM8lRkkXvXTA6mmMieg00eiWCf8nsJVt7GDDwcivW3Vgv7E7gMfMqrT+DDbVuUFMIA/3Wjokp5dq',
-            'Content-Type': 'application/json'
-        }
+    // ============================================
+    // КОНФИГУРАЦИЯ
+    // ============================================
+    const CONFIG = {
+        API_BASE_URL: 'https://test-api.tatar.ru',
+        userId: '5a4bd939064d5c372b8b4578',
+        threshold: 30,
+        silenceTimeout: 1000,
+        maxRecordTime: 100000
     };
 
-    let audioContext = null;
-    let intervalId = null;
-    let countdownId = null;
+    // ============================================
+    // СОСТОЯНИЕ
+    // ============================================
+    let voicePlugin = null;
+    let isPluginActive = false;
+    let isRecording = false;
     let isPlaying = false;
-    let intervalSeconds = 30;
-    let timeLeft = 30;
-    let audioQueue = []; // Очередь аудио для последовательного воспроизведения
+    let isWaitingResponse = false;
+    let messages = [];
 
-    const toggleBtn = document.getElementById('toggleBtn');
+    // ============================================
+    // ЭЛЕМЕНТЫ UI
+    // ============================================
+    const mainButton = document.getElementById('mainButton');
     const statusText = document.getElementById('statusText');
-    const indicator = document.getElementById('indicator');
-    const timerDisplay = document.getElementById('timer');
-    const intervalInput = document.getElementById('intervalInput');
-    const logEl = document.getElementById('log');
+    const messagesContainer = document.getElementById('messagesContainer');
+    const thresholdInput = document.getElementById('thresholdInput');
+    const thresholdValue = document.getElementById('thresholdValue');
+    const silenceInput = document.getElementById('silenceInput');
+    const userIdInput = document.getElementById('userIdInput');
 
-    function log(msg) {
-        const time = new Date().toLocaleTimeString();
-        logEl.innerHTML += `<div>[${time}] ${msg}</div>`;
-        logEl.scrollTop = logEl.scrollHeight;
-        console.log(`[Synthesis] ${msg}`);
+    // ============================================
+    // API ФУНКЦИИ (аналог voiceAssistant.js)
+    // ============================================
+    async function apiRequest(url, data, responseType = 'json') {
+        try {
+            const response = await fetch(`${CONFIG.API_BASE_URL}${url}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            if (responseType === 'blob') {
+                return await response.blob();
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
     }
 
-    // Инициализация AudioContext
-    function initAudio() {
-        if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
+    async function processMessage(message, responseBefore = null) {
+        return await apiRequest(
+            `/public/api/v1/users/${CONFIG.userId}/voice-assistant/message_processing.json`,
+            {
+                message: message,
+                response_before: responseBefore
+            }
+        );
     }
 
-    // Воспроизведение аудио из Blob
-    async function playAudioBlob(blob) {
-        if (!audioContext) return;
-
-        const arrayBuffer = await blob.arrayBuffer();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
-
-        return new Promise(resolve => {
-            source.onended = resolve;
-        });
+    async function synthesizeText(message) {
+        return await apiRequest(
+            `/public/api/v1/users/${CONFIG.userId}/voice-assistant/synthesis.json`,
+            { message: message },
+            'blob'
+        );
     }
 
-    // Запрос к API синтеза
-    async function fetchSynthesis(message) {
-        log(`📤 Запрос: "${message}"`);
+    async function transcribeAudio(base64Content) {
+        const response = await apiRequest(
+            `/public/api/v1/users/${CONFIG.userId}/voice-assistant/transcription.json`,
+            { file: base64Content }
+        );
 
-        const response = await fetch(API_CONFIG.url, {
-            method: 'POST',
-            headers: API_CONFIG.headers,
-            body: JSON.stringify({ message })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => 'No error details');
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-
-        // Пробуем получить аудио (blob) или текст
-        const contentType = response.headers.get('content-type');
-
-        if (contentType?.includes('audio')) {
-            log('🎵 Получено аудио');
-            return await response.blob();
+        let messageText = '';
+        if (Array.isArray(response?.text)) {
+            messageText = response.text.join(' ');
         } else {
-            // Если вернулся JSON с ссылкой на аудио или base64
-            const data = await response.json().catch(() => ({}));
-            log(`📄 Получен ответ: ${JSON.stringify(data).slice(0, 100)}...`);
-
-            // Если есть audio_url или audio_data - обрабатываем
-            if (data.audio_url) {
-                log('🔗 Загрузка аудио по ссылке...');
-                const audioResp = await fetch(data.audio_url);
-                return await audioResp.blob();
-            }
-            if (data.audio_data) {
-                // Base64 audio
-                const binary = atob(data.audio_data);
-                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-                return new Blob([bytes], { type: 'audio/wav' });
-            }
-
-            // Если просто текст - озвучиваем через Web Speech API (fallback)
-            if (data.text || message) {
-                log('🗣️ Используем браузерный синтез');
-                return await synthesizeWithBrowser(data.text || message);
-            }
+            messageText = response?.text || response?.transcription || '';
         }
 
-        throw new Error('Не удалось получить аудио из ответа');
+        return messageText;
     }
 
-    // Fallback: браузерный SpeechSynthesis
-    async function synthesizeWithBrowser(text) {
+    // ============================================
+    // УТИЛИТЫ
+    // ============================================
+    function updateStatus(text, type = '') {
+        statusText.textContent = text;
+        statusText.className = 'status-text ' + type;
+    }
+
+    function formatTime(timestamp) {
+        return new Date(timestamp).toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function addMessage(text, type) {
+        if (messages.length === 0) {
+            messagesContainer.innerHTML = '';
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message message-${type}`;
+        messageDiv.innerHTML = `
+                <div>${text}</div>
+                <div class="message-time">${formatTime(Date.now())}</div>
+            `;
+
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        messages.push({ text, type, timestamp: Date.now() });
+    }
+
+    function showTypingIndicator() {
+        messagesContainer.innerHTML = '';
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message message-assistant';
+        typingDiv.innerHTML = `
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+        messagesContainer.appendChild(typingDiv);
+    }
+
+    function blobToBase64(blob) {
         return new Promise((resolve, reject) => {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ru-RU';
-                utterance.onend = () => resolve(null); // null = не нужно дополнительно играть
-                utterance.onerror = reject;
-                speechSynthesis.speak(utterance);
-            } else {
-                reject(new Error('SpeechSynthesis не поддерживается'));
-            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result.split(',')[1];
+                resolve(base64String);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
         });
     }
 
-    // Основная функция: запрос + воспроизведение
-    async function triggerSynthesis() {
-        if (!isPlaying) return;
+    async function convertWebmToMp3(webmBlob) {
+        // Упрощённая версия - можно использовать тот же код что в SalutMessages.vue
+        // Для продакшена лучше использовать серверную конвертацию
+        return webmBlob; // Возвращаем как есть для простоты
+    }
 
-        const message = new Date().toLocaleString('ru-RU', {
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
+    // ============================================
+    // ОСНОВНАЯ ЛОГИКА
+    // ============================================
+    async function handleRecordingComplete(blob) {
+        if (isPlaying) {
+            updateStatus('Воспроизведение... (скажите "стоп" для остановки)');
+            return;
+        }
+
+        console.log(`Запись завершена (размер: ${(blob.size / 1024).toFixed(2)} KB)`);
+        updateStatus('Обработка записи...', 'recording');
 
         try {
-            statusText.textContent = 'Синтез...';
-            indicator.classList.add('active');
+            // Конвертация в MP3 (опционально)
+            const mp3Blob = await convertWebmToMp3(blob);
 
-            const audioResult = await fetchSynthesis(message);
+            // Конвертация в Base64
+            const base64Content = await blobToBase64(mp3Blob);
 
-            // Если вернули blob - играем, если null (browser synthesis) - уже играет
-            if (audioResult instanceof Blob) {
-                await playAudioBlob(audioResult);
+            console.log('Отправка аудио на сервер:', {
+                size: mp3Blob.size,
+                base64Length: base64Content.length
+            });
+
+            // Транскрипция
+            updateStatus('Распознавание речи...');
+            const messageText = await transcribeAudio(base64Content);
+
+            if (!messageText) {
+                throw new Error('Не удалось распознать текст');
             }
 
-            log('✅ Воспроизведено');
+            // Добавляем сообщение пользователя
+            addMessage(messageText, 'user');
+            updateStatus('Отправка Алисе...');
+
+            // Показываем индикатор ожидания
+            showTypingIndicator();
+            isWaitingResponse = true;
+
+            // Отправка сообщения Алисе
+            const lastMessage = messages.length > 1
+                ? messages[messages.length - 2]
+                : null;
+            const responseBefore = lastMessage ? JSON.stringify({}) : null;
+
+            const apiResponse = await processMessage(messageText, responseBefore);
+
+            isWaitingResponse = false;
+            const responseText = apiResponse?.aliceResponse?.response?.text;
+
+            if (responseText) {
+                // Добавляем ответ ассистента
+                addMessage(responseText, 'assistant');
+                updateStatus('Синтез речи...');
+
+                // Синтез и воспроизведение ответа
+                const audioBlob = await synthesizeText(responseText);
+
+                updateStatus('Воспроизведение...', 'playing');
+                isPlaying = true;
+
+                if (voicePlugin) {
+                    await voicePlugin.playAudio(audioBlob);
+                }
+            }
+
+            updateStatus('Готов к записи');
+
         } catch (error) {
-            log(`❌ Ошибка: ${error.message}`);
-            statusText.textContent = 'Ошибка';
-            indicator.classList.remove('active');
-        } finally {
-            if (isPlaying) {
-                statusText.textContent = `Активно: каждые ${intervalSeconds} сек`;
-                indicator.classList.add('active');
-            }
+            console.error('Ошибка при обработке:', error);
+            updateStatus('Ошибка: ' + error.message);
+            isWaitingResponse = false;
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = error.message;
+            messagesContainer.appendChild(errorDiv);
+
+            setTimeout(() => {
+                updateStatus('Готов к записи');
+            }, 2000);
         }
     }
 
-    // Таймер обратного отсчёта
-    function startCountdown() {
-        timeLeft = intervalSeconds;
-        timerDisplay.textContent = timeLeft;
+    function initVoicePlugin() {
+        if (voicePlugin) {
+            return;
+        }
 
-        countdownId = setInterval(() => {
-            timeLeft--;
-            timerDisplay.textContent = timeLeft;
-            if (timeLeft <= 0) {
-                timeLeft = intervalSeconds;
-                timerDisplay.textContent = timeLeft;
-            }
-        }, 1000);
+        voicePlugin = new VoiceControlPlugin({
+            onListeningStart: () => {
+                console.log('Плагин начал слушать микрофон');
+                updateStatus('Слушаю...');
+                mainButton.textContent = '🛑 Стоп';
+                mainButton.classList.add('active');
+            },
+            onRecordingStart: () => {
+                console.log('Начата запись');
+                isRecording = true;
+                updateStatus('Идёт запись...', 'recording');
+            },
+            onRecordingEnd: (blob) => {
+                isRecording = false;
+                handleRecordingComplete(blob);
+            },
+            onPlaybackStart: () => {
+                console.log('Воспроизведение');
+                if (voicePlugin?.isRecording) {
+                    voicePlugin.stopRecording();
+                }
+                isPlaying = true;
+                isRecording = false;
+                updateStatus('Воспроизведение...', 'playing');
+                mainButton.textContent = '🔊 Играет';
+                mainButton.classList.remove('active');
+                mainButton.classList.add('playing');
+            },
+            onPlaybackEnd: () => {
+                console.log('Воспроизведение завершено');
+                isPlaying = false;
+                mainButton.textContent = '🎤 Записать';
+                mainButton.classList.remove('playing');
+                updateStatus('Готов к записи');
+            },
+            onPlaybackStopped: () => {
+                console.log('Воспроизведение остановлено');
+                isPlaying = false;
+                mainButton.textContent = '🎤 Записать';
+                mainButton.classList.remove('playing');
+                updateStatus('Готов к записи');
+            },
+            silenceTimeout: CONFIG.silenceTimeout,
+            maxRecordTime: CONFIG.maxRecordTime,
+            threshold: CONFIG.threshold,
+            stopCommands: ['стоп', 'хватит', 'хват']
+        });
+
+        console.log('Плагин инициализирован');
     }
 
-    function stopCountdown() {
-        if (countdownId) {
-            clearInterval(countdownId);
-            countdownId = null;
+    async function startVoiceControl() {
+        try {
+            initVoicePlugin();
+
+            // Обновляем настройки из UI
+            CONFIG.threshold = parseInt(thresholdInput.value);
+            CONFIG.silenceTimeout = parseInt(silenceInput.value);
+            CONFIG.userId = userIdInput.value.trim();
+
+            voicePlugin.options.threshold = CONFIG.threshold;
+            voicePlugin.options.silenceTimeout = CONFIG.silenceTimeout;
+
+            await voicePlugin.start();
+            isPluginActive = true;
+
+            console.log('Плагин голосового управления запущен');
+        } catch (error) {
+            console.error('Ошибка запуска плагина:', error.message);
+            updateStatus('Ошибка: ' + error.message);
+            isPluginActive = false;
         }
     }
 
-    // Запуск цикла
-    async function startScheduler() {
-        initAudio();
-        isPlaying = true;
-
-        // Первый запуск сразу
-        await triggerSynthesis();
-        startCountdown();
-
-        // Затем по интервалу
-        intervalId = setInterval(() => {
-            if (isPlaying) {
-                triggerSynthesis();
-            }
-        }, intervalSeconds * 1000);
-
-        // UI
-        toggleBtn.textContent = '⏹ Остановить';
-        toggleBtn.classList.add('stop');
-        statusText.textContent = `Активно: каждые ${intervalSeconds} сек`;
-        indicator.classList.add('active');
-        intervalInput.disabled = true;
-        toggleBtn.disabled = false;
-        log('🚀 Запущено');
-    }
-
-    // Остановка
-    function stopScheduler() {
+    function stopVoiceControl() {
+        if (voicePlugin) {
+            voicePlugin.destroy();
+            voicePlugin = null;
+        }
+        isPluginActive = false;
+        isRecording = false;
         isPlaying = false;
 
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-        stopCountdown();
+        mainButton.textContent = 'Запустить';
+        mainButton.classList.remove('active', 'playing');
+        updateStatus('Плагин остановлен');
 
-        // UI
-        toggleBtn.textContent = '▶ Запустить';
-        toggleBtn.classList.remove('stop');
-        statusText.textContent = 'Остановлено';
-        indicator.classList.remove('active');
-        intervalInput.disabled = false;
-        timerDisplay.textContent = intervalSeconds;
-        log('⏹ Остановлено');
+        console.log('Плагин остановлен');
     }
 
-    // Обработчики
-    toggleBtn.addEventListener('click', async () => {
-        toggleBtn.disabled = true;
-
-        if (isPlaying) {
-            stopScheduler();
-            toggleBtn.disabled = false;
+    function toggleVoiceControl() {
+        if (isPluginActive) {
+            stopVoiceControl();
         } else {
-            const newInterval = parseInt(intervalInput.value);
-            if (newInterval >= 5 && newInterval <= 300) {
-                intervalSeconds = newInterval;
-            }
-            await startScheduler();
-            // Кнопка уже включена в startScheduler
+            startVoiceControl();
+        }
+    }
+
+    // ============================================
+    // СОБЫТИЯ
+    // ============================================
+    mainButton.addEventListener('click', toggleVoiceControl);
+
+    thresholdInput.addEventListener('input', (e) => {
+        thresholdValue.textContent = e.target.value;
+        CONFIG.threshold = parseInt(e.target.value);
+        if (voicePlugin) {
+            voicePlugin.options.threshold = CONFIG.threshold;
         }
     });
 
-    intervalInput.addEventListener('change', () => {
-        const newInterval = parseInt(intervalInput.value);
-        if (newInterval >= 5 && newInterval <= 300) {
-            intervalSeconds = newInterval;
-            timerDisplay.textContent = newInterval;
-            if (isPlaying) {
-                // Перезапуск с новым интервалом
-                stopScheduler();
-                startScheduler();
-            }
+    silenceInput.addEventListener('change', (e) => {
+        CONFIG.silenceTimeout = parseInt(e.target.value);
+        if (voicePlugin) {
+            voicePlugin.options.silenceTimeout = CONFIG.silenceTimeout;
         }
     });
 
-    intervalInput.addEventListener('input', (e) => {
-        let val = parseInt(e.target.value);
-        if (isNaN(val) || val < 5) e.target.value = 5;
-        if (val > 300) e.target.value = 300;
+    userIdInput.addEventListener('change', (e) => {
+        CONFIG.userId = e.target.value.trim();
     });
 
-    // Предзагрузка: разблокировка аудио при первом клике на странице
-    document.addEventListener('click', () => {
-        if (!audioContext) {
-            initAudio();
+    // Очистка при закрытии страницы
+    window.addEventListener('beforeunload', () => {
+        if (voicePlugin) {
+            voicePlugin.destroy();
         }
-    }, { once: true });
+    });
 
-    log('📦 Готов к работе');
+    // Инициализация
+    console.log('Voice Assistant готов к работе');
+    console.log('User ID:', CONFIG.userId);
 </script>
 </body>
 </html>
