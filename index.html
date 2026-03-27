@@ -231,6 +231,7 @@
     let isRecording = false;
     let isPlaying = false;
     let isWaitingResponse = false;
+    let listeningPausedDuringProcessing = false; // 👈 НОВОЕ: флаг паузы прослушивания
     let messages = [];
 
     // ============================================
@@ -245,7 +246,7 @@
     const userIdInput = document.getElementById('userIdInput');
 
     // ============================================
-    // API ФУНКЦИИ (аналог voiceAssistant.js)
+    // API ФУНКЦИИ
     // ============================================
     async function apiRequest(url, data, responseType = 'json') {
         try {
@@ -304,6 +305,7 @@
         } else {
             messageText = response?.text || response?.transcription || '';
         }
+
         return messageText;
     }
 
@@ -366,6 +368,9 @@
         });
     }
 
+    // ============================================
+    // 🎵 КОНВЕРТАЦИЯ WebM → MP3 (как в SalutMessages.vue)
+    // ============================================
     async function convertWebmToMp3(webmBlob) {
         return new Promise(async (resolve, reject) => {
             try {
@@ -377,18 +382,15 @@
                 const sampleRate = audioBuffer.sampleRate;
                 const samples = audioBuffer.getChannelData(0);
 
-                // Конвертация Float32 в Int16
                 const samplesInt16 = new Int16Array(samples.length);
                 for (let i = 0; i < samples.length; i++) {
                     const s = Math.max(-1, Math.min(1, samples[i]));
                     samplesInt16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
 
-                // Инициализация MP3 энкодера
                 const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
                 const mp3Data = [];
 
-                // Кодирование блоками по 1152 сэмпла
                 const sampleBlockSize = 1152;
                 for (let i = 0; i < samplesInt16.length; i += sampleBlockSize) {
                     const sampleChunk = samplesInt16.subarray(i, i + sampleBlockSize);
@@ -398,7 +400,6 @@
                     }
                 }
 
-                // Финализация
                 const mp3buf = mp3encoder.flush();
                 if (mp3buf.length > 0) {
                     mp3Data.push(mp3buf);
@@ -414,31 +415,39 @@
     }
 
     // ============================================
-    // ОСНОВНАЯ ЛОГИКА
+    // 📤 ОТПРАВКА АУДИО НА СЕРВЕР (как в SalutMessages.vue)
     // ============================================
-    async function handleRecordingComplete(blob) {
-        if (isPlaying) {
-            updateStatus('Воспроизведение... (скажите "стоп" для остановки)');
-            return;
-        }
-
-        console.log(`Запись завершена (размер: ${(blob.size / 1024).toFixed(2)} KB)`);
-        updateStatus('Обработка записи...', 'recording');
-
+    async function sendAudioToServer(blob) {
         try {
-            // Конвертация в MP3 (опционально)
+            updateStatus('Конвертация аудио...');
+
+            // Конвертация WebM → MP3
             const mp3Blob = await convertWebmToMp3(blob);
 
-            // Конвертация в Base64
+            updateStatus('Подготовка данных...');
+
             const base64Content = await blobToBase64(mp3Blob);
+
+            updateStatus('Распознавание речи...');
 
             console.log('Отправка аудио на сервер:', {
                 size: mp3Blob.size,
                 base64Length: base64Content.length
             });
 
+            // 👇 ПАУЗА ПРОСЛУШИВАНИЯ (как в SalutMessages.vue)
+            if (voicePlugin) {
+                if (voicePlugin.isRecording) {
+                    voicePlugin.stopRecording();
+                }
+                voicePlugin.isListening = false;
+                voicePlugin.shouldStopSoundLoop = true;
+                isRecording = false;
+                listeningPausedDuringProcessing = true;
+                console.log('✅ Прослушивание остановлено до этапа озвучивания ответа');
+            }
+
             // Транскрипция
-            updateStatus('Распознавание речи...');
             const messageText = await transcribeAudio(base64Content);
 
             if (!messageText) {
@@ -447,11 +456,11 @@
 
             // Добавляем сообщение пользователя
             addMessage(messageText, 'user');
-            updateStatus('Отправка Алисе...');
+            updateStatus('Обработка сообщения...');
 
             // Показываем индикатор ожидания
-            showTypingIndicator();
             isWaitingResponse = true;
+            showTypingIndicator();
 
             // Отправка сообщения Алисе
             const lastMessage = messages.length > 1
@@ -465,7 +474,16 @@
             const responseText = apiResponse?.aliceResponse?.response?.text;
 
             if (responseText) {
-                // Добавляем ответ ассистента
+                // 👇 ВОССТАНОВЛЕНИЕ ПРОСЛУШИВАНИЯ перед воспроизведением
+                if (voicePlugin && listeningPausedDuringProcessing) {
+                    voicePlugin.shouldStopSoundLoop = false;
+                    voicePlugin.isListening = true;
+                    voicePlugin.lastSoundTime = Date.now();
+                    voicePlugin.checkSoundLoop();
+                    listeningPausedDuringProcessing = false;
+                    console.log('✅ Прослушивание восстановлено перед воспроизведением');
+                }
+
                 addMessage(responseText, 'assistant');
                 updateStatus('Синтез речи...');
 
@@ -483,7 +501,7 @@
             updateStatus('Готов к записи');
 
         } catch (error) {
-            console.error('Ошибка при обработке:', error);
+            console.error('Ошибка при отправке на сервер:', error);
             updateStatus('Ошибка: ' + error.message);
             isWaitingResponse = false;
 
@@ -495,9 +513,38 @@
             setTimeout(() => {
                 updateStatus('Готов к записи');
             }, 2000);
+        } finally {
+            // 👇 ВОССТАНОВЛЕНИЕ в finally (на случай ошибки)
+            if (voicePlugin && listeningPausedDuringProcessing) {
+                voicePlugin.shouldStopSoundLoop = false;
+                voicePlugin.isListening = true;
+                voicePlugin.lastSoundTime = Date.now();
+                voicePlugin.checkSoundLoop();
+                listeningPausedDuringProcessing = false;
+                console.log('✅ Прослушивание восстановлено в finally');
+            }
         }
     }
 
+    // ============================================
+    // ОБРАБОТКА ЗАВЕРШЕНИЯ ЗАПИСИ
+    // ============================================
+    async function handleRecordingComplete(blob) {
+        if (isPlaying) {
+            console.log('Игнорируем запись во время воспроизведения ответа');
+            updateStatus('Воспроизведение... (скажите "стоп" для остановки)');
+            return;
+        }
+
+        console.log(`Запись завершена (размер: ${(blob.size / 1024).toFixed(2)} KB)`);
+        updateStatus('Обработка записи...');
+
+        await sendAudioToServer(blob);
+    }
+
+    // ============================================
+    // ИНИЦИАЛИЗАЦИЯ ПЛАГИНА
+    // ============================================
     function initVoicePlugin() {
         if (voicePlugin) {
             return;
@@ -558,7 +605,6 @@
         try {
             initVoicePlugin();
 
-            // Обновляем настройки из UI
             CONFIG.threshold = parseInt(thresholdInput.value);
             CONFIG.silenceTimeout = parseInt(silenceInput.value);
             CONFIG.userId = userIdInput.value.trim();
@@ -585,6 +631,7 @@
         isPluginActive = false;
         isRecording = false;
         isPlaying = false;
+        listeningPausedDuringProcessing = false;
 
         mainButton.textContent = 'Запустить';
         mainButton.classList.remove('active', 'playing');
@@ -625,13 +672,11 @@
         CONFIG.userId = e.target.value.trim();
     });
 
-    // Очистка при закрытии страницы
     window.addEventListener('beforeunload', () => {
         if (voicePlugin) {
             voicePlugin.destroy();
         }
     });
 
-    // Инициализация
     console.log('Voice Assistant готов к работе');
     console.log('User ID:', CONFIG.userId);</script></body></html>
