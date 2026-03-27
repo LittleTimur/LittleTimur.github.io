@@ -353,4 +353,3 @@ class VoiceControlPlugin {
 }
 
 window.VoiceControlPlugin = VoiceControlPlugin;
-export default VoiceControlPlugin;
